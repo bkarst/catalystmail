@@ -1,0 +1,44 @@
+{
+  "name": "@catalyst/web",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "The Catalyst web app (spec §4.1): Next.js route files for the API, MCP and public endpoints, and the UI. The server code itself lives in @catalyst/server.",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "test": "vitest run",
+    "typecheck": "next typegen && tsc --noEmit -p tsconfig.json",
+    "generate:api": "node scripts/api-types.ts",
+    "test:e2e": "next build && playwright test"
+  },
+  "dependencies": {
+    "@catalyst/contract": "workspace:*",
+    "@catalyst/core": "workspace:*",
+    "@catalyst/db": "workspace:*",
+    "@catalyst/server": "workspace:*",
+    "@tailwindcss/postcss": "4.3.3",
+    "@tanstack/react-query": "5.105.0",
+    "clsx": "2.1.1",
+    "drizzle-orm": "^0.45.4",
+    "kysely": "0.29.8",
+    "lucide-react": "1.62.0",
+    "next": "^16.4.6",
+    "openapi-fetch": "0.17.0",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "tailwind-merge": "3.7.0",
+    "tailwindcss": "4.3.3",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "4.14.0",
+    "@catalyst/jobs": "workspace:*",
+    "@catalyst/storage": "workspace:*",
+    "@playwright/test": "1.64.1",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "openapi-typescript": "7.13.0"
+  }
+}

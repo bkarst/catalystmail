@@ -1,0 +1,33 @@
+/* Visual language (spec §15.2): zinc neutrals, one indigo accent, 1 px borders, 8 px radius,
+   light and dark from the system, 150 ms motion that respects reduced motion. */
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Geist", "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "Geist Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  --radius-card: 8px;
+  --radius-pill: 6px;
+  --default-transition-duration: 150ms;
+  --default-transition-timing-function: cubic-bezier(0, 0, 0.2, 1);
+}
+
+:root {
+  color-scheme: light dark;
+}
+
+body {
+  @apply bg-white text-sm text-zinc-900 antialiased dark:bg-zinc-950 dark:text-zinc-100;
+}
+
+:focus-visible {
+  @apply outline-2 outline-offset-2 outline-indigo-600;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition: none !important;
+    animation: none !important;
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "name": "@catalyst/contract",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "The single API contract for Catalyst (spec §13): zod schemas, the operation registry and the OpenAPI 3.1 document generated from them.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@catalyst/core": "workspace:*",
+    "zod": "^4.6.7",
+    "zod-openapi": "^6.0.2"
+  }
+}

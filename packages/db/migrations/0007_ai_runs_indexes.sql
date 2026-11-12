@@ -1,0 +1,2 @@
+CREATE INDEX "ai_runs_workspace_idx" ON "ai_runs" USING btree ("workspace_id","created_at");--> statement-breakpoint
+CREATE INDEX "ai_runs_thread_idx" ON "ai_runs" USING btree ("thread_id","created_at");

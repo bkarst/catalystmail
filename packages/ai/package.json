@@ -1,0 +1,21 @@
+{
+  "name": "@catalyst/ai",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^1.8.0",
+    "@catalyst/core": "workspace:*",
+    "@catalyst/email": "workspace:*",
+    "@typesafe-ai/sdk": "0.7.0",
+    "zod": "^4.6.7"
+  },
+  "description": "The AI agent's model-facing half (spec §10): task schemas, versioned prompts, context assembly, guardrails and the Claude client. No database access."
+}

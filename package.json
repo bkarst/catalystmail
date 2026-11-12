@@ -1,0 +1,19 @@
+{
+  "name": "catalyst",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.18.2",
+  "engines": {
+    "node": ">=22.18"
+  },
+  "scripts": {
+    "test": "pnpm -r test",
+    "typecheck": "pnpm -r typecheck"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "fast-check": "^4.10.2",
+    "typescript": "^6.0.3",
+    "vitest": "^5.1.0"
+  }
+}

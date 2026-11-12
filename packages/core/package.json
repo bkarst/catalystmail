@@ -1,0 +1,14 @@
+{
+  "name": "@catalyst/core",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Pure domain logic for Catalyst: thread derivation, scheduling maths, capacity, reputation and policies. No I/O.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  }
+}

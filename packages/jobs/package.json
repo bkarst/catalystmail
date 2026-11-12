@@ -1,0 +1,21 @@
+{
+  "name": "@catalyst/jobs",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@catalyst/db": "workspace:*",
+    "drizzle-orm": "^0.45.4",
+    "kysely": "0.29.8",
+    "pg-boss": "^12.38.2",
+    "zod": "^4.6.7"
+  },
+  "description": "The job queue (spec D7, §4.4): the job catalog with typed payloads, on pg-boss in PostgreSQL."
+}

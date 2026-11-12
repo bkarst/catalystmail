@@ -1,0 +1,6662 @@
+[
+  {
+    "name": "get_current_principal",
+    "toolset": "admin",
+    "scopes": [],
+    "annotations": {
+      "title": "Show who is calling and what they may do",
+      "readOnlyHint": true,
+      "idempotentHint": false,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "inputs": [],
+    "required": [],
+    "output": [
+      "id",
+      "kind",
+      "name",
+      "role",
+      "scopes",
+      "two_factor_required",
+      "workspace"
+    ]
+  },
+  {
+    "name": "get_work_queue",
+    "toolset": "threads",
+    "scopes": [
+      "threads:read"
+    ],
+    "annotations": {
+      "title": "Everything waiting for a person, most urgent first",
+      "readOnlyHint": true,
+      "idempotentHint": false,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "limit"
+    ],
+    "required": [],
+    "output": [
+      "counts",
+      "items"
+    ]
+  },
+  {
+    "name": "get_job",
+    "toolset": "contacts",
+    "scopes": [],
+    "annotations": {
+      "title": "Check on a long-running task",
+      "readOnlyHint": true,
+      "idempotentHint": false,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "jobId"
+    ],
+    "required": [
+      "jobId"
+    ],
+    "output": [
+      "created_at",
+      "error",
+      "finished_at",
+      "id",
+      "kind",
+      "progress",
+      "status"
+    ]
+  },
+  {
+    "name": "search_all",
+    "toolset": "contacts",
+    "scopes": [
+      "contacts:read"
+    ],
+    "annotations": {
+      "title": "Search contacts, companies, threads and campaigns at once",
+      "readOnlyHint": true,
+      "idempotentHint": false,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "limit",
+      "q"
+    ],
+    "required": [
+      "q"
+    ],
+    "output": [
+      "data"
+    ]
+  },
+  {
+    "name": "list_contacts",
+    "toolset": "contacts",
+    "scopes": [
+      "contacts:read"
+    ],
+    "annotations": {
+      "title": "List and search contacts",
+      "readOnlyHint": true,
+      "idempotentHint": false,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "company_id",
+      "cursor",
+      "email_verification",
+      "filter",
+      "lifecycle_stage",
+      "limit",
+      "list_id",
+      "owner_user_id",
+      "q",
+      "sort",
+      "subscription_status",
+      "tag_id",
+      "updated_after"
+    ],
+    "required": [],
+    "output": [
+      "data",
+      "next_cursor"
+    ]
+  },
+  {
+    "name": "create_contact",
+    "toolset": "contacts",
+    "scopes": [
+      "contacts:write"
+    ],
+    "annotations": {
+      "title": "Create a contact",
+      "readOnlyHint": false,
+      "idempotentHint": false,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "city",
+      "company_id",
+      "consent_basis",
+      "country",
+      "custom_fields",
+      "do_not_contact",
+      "email",
+      "first_name",
+      "idempotency_key",
+      "last_name",
+      "lifecycle_stage",
+      "linkedin_url",
+      "notes",
+      "owner_user_id",
+      "phone",
+      "tag_ids",
+      "timezone",
+      "title"
+    ],
+    "required": [
+      "email"
+    ],
+    "output": [
+      "city",
+      "company_id",
+      "consent_basis",
+      "country",
+      "created_at",
+      "custom_fields",
+      "do_not_contact",
+      "email",
+      "email_flags",
+      "email_verification",
+      "email_verified_at",
+      "first_name",
+      "id",
+      "last_contacted_at",
+      "last_name",
+      "last_opened_at",
+      "last_replied_at",
+      "lifecycle_stage",
+      "linkedin_url",
+      "notes",
+      "owner_user_id",
+      "phone",
+      "source",
+      "source_detail",
+      "subscription_status",
+      "tag_ids",
+      "timezone",
+      "title",
+      "unsubscribed_at",
+      "updated_at"
+    ]
+  },
+  {
+    "name": "get_contact",
+    "toolset": "contacts",
+    "scopes": [
+      "contacts:read"
+    ],
+    "annotations": {
+      "title": "Get one contact",
+      "readOnlyHint": true,
+      "idempotentHint": false,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "contactId"
+    ],
+    "required": [
+      "contactId"
+    ],
+    "output": [
+      "city",
+      "company_id",
+      "consent_basis",
+      "country",
+      "created_at",
+      "custom_fields",
+      "do_not_contact",
+      "email",
+      "email_flags",
+      "email_verification",
+      "email_verified_at",
+      "first_name",
+      "id",
+      "last_contacted_at",
+      "last_name",
+      "last_opened_at",
+      "last_replied_at",
+      "lifecycle_stage",
+      "linkedin_url",
+      "notes",
+      "owner_user_id",
+      "phone",
+      "source",
+      "source_detail",
+      "subscription_status",
+      "tag_ids",
+      "timezone",
+      "title",
+      "unsubscribed_at",
+      "updated_at"
+    ]
+  },
+  {
+    "name": "update_contact",
+    "toolset": "contacts",
+    "scopes": [
+      "contacts:write"
+    ],
+    "annotations": {
+      "title": "Change fields on a contact",
+      "readOnlyHint": false,
+      "idempotentHint": true,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "city",
+      "company_id",
+      "consent_basis",
+      "contactId",
+      "country",
+      "custom_fields",
+      "do_not_contact",
+      "email",
+      "first_name",
+      "if_match",
+      "last_name",
+      "lifecycle_stage",
+      "linkedin_url",
+      "notes",
+      "owner_user_id",
+      "phone",
+      "tag_ids",
+      "timezone",
+      "title"
+    ],
+    "required": [
+      "contactId"
+    ],
+    "output": [
+      "city",
+      "company_id",
+      "consent_basis",
+      "country",
+      "created_at",
+      "custom_fields",
+      "do_not_contact",
+      "email",
+      "email_flags",
+      "email_verification",
+      "email_verified_at",
+      "first_name",
+      "id",
+      "last_contacted_at",
+      "last_name",
+      "last_opened_at",
+      "last_replied_at",
+      "lifecycle_stage",
+      "linkedin_url",
+      "notes",
+      "owner_user_id",
+      "phone",
+      "source",
+      "source_detail",
+      "subscription_status",
+      "tag_ids",
+      "timezone",
+      "title",
+      "unsubscribed_at",
+      "updated_at"
+    ]
+  },
+  {
+    "name": "delete_contact",
+    "toolset": "contacts",
+    "scopes": [
+      "contacts:write"
+    ],
+    "annotations": {
+      "title": "Delete a contact",
+      "readOnlyHint": false,
+      "idempotentHint": false,
+      "destructiveHint": true,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "contactId"
+    ],
+    "required": [
+      "contactId"
+    ],
+    "output": null
+  },
+  {
+    "name": "erase_contact",
+    "toolset": "contacts",
+    "scopes": [
+      "contacts:erase"
+    ],
+    "annotations": {
+      "title": "Erase a contact’s personal data for a privacy request",
+      "readOnlyHint": false,
+      "idempotentHint": false,
+      "destructiveHint": true,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "contactId",
+      "idempotency_key"
+    ],
+    "required": [
+      "contactId"
+    ],
+    "output": null
+  },
+  {
+    "name": "upsert_contacts",
+    "toolset": "contacts",
+    "scopes": [
+      "contacts:write"
+    ],
+    "annotations": {
+      "title": "Create or update up to 1,000 contacts at once",
+      "readOnlyHint": false,
+      "idempotentHint": false,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "contacts",
+      "dedupe_strategy",
+      "idempotency_key"
+    ],
+    "required": [
+      "contacts"
+    ],
+    "output": [
+      "created",
+      "results",
+      "skipped",
+      "updated"
+    ]
+  },
+  {
+    "name": "apply_contact_bulk_action",
+    "toolset": "contacts",
+    "scopes": [
+      "contacts:write"
+    ],
+    "annotations": {
+      "title": "Tag, list, assign, verify, suppress, delete or export many contacts",
+      "readOnlyHint": false,
+      "idempotentHint": false,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "action",
+      "contact_ids",
+      "filter",
+      "idempotency_key",
+      "lifecycle_stage",
+      "list_id",
+      "note",
+      "owner_user_id",
+      "tag_ids"
+    ],
+    "required": [
+      "action"
+    ],
+    "output": [
+      "action",
+      "changed",
+      "csv",
+      "matched",
+      "skipped"
+    ]
+  },
+  {
+    "name": "merge_contacts",
+    "toolset": "contacts",
+    "scopes": [
+      "contacts:write"
+    ],
+    "annotations": {
+      "title": "Merge a duplicate contact into this one",
+      "readOnlyHint": false,
+      "idempotentHint": false,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "contactId",
+      "idempotency_key",
+      "merge_contact_id",
+      "take_from_merged"
+    ],
+    "required": [
+      "contactId",
+      "merge_contact_id"
+    ],
+    "output": [
+      "city",
+      "company_id",
+      "consent_basis",
+      "country",
+      "created_at",
+      "custom_fields",
+      "do_not_contact",
+      "email",
+      "email_flags",
+      "email_verification",
+      "email_verified_at",
+      "first_name",
+      "id",
+      "last_contacted_at",
+      "last_name",
+      "last_opened_at",
+      "last_replied_at",
+      "lifecycle_stage",
+      "linkedin_url",
+      "notes",
+      "owner_user_id",
+      "phone",
+      "source",
+      "source_detail",
+      "subscription_status",
+      "tag_ids",
+      "timezone",
+      "title",
+      "unsubscribed_at",
+      "updated_at"
+    ]
+  },
+  {
+    "name": "list_contact_timeline",
+    "toolset": "contacts",
+    "scopes": [
+      "contacts:read"
+    ],
+    "annotations": {
+      "title": "List a contact’s timeline",
+      "readOnlyHint": true,
+      "idempotentHint": false,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "category",
+      "contactId",
+      "cursor",
+      "limit"
+    ],
+    "required": [
+      "contactId"
+    ],
+    "output": [
+      "data",
+      "next_cursor"
+    ]
+  },
+  {
+    "name": "add_contact_note",
+    "toolset": "contacts",
+    "scopes": [
+      "contacts:write"
+    ],
+    "annotations": {
+      "title": "Add a note to a contact’s timeline",
+      "readOnlyHint": false,
+      "idempotentHint": false,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "contactId",
+      "idempotency_key",
+      "text"
+    ],
+    "required": [
+      "contactId",
+      "text"
+    ],
+    "output": [
+      "actor_id",
+      "actor_type",
+      "campaign_id",
+      "contact_id",
+      "data",
+      "id",
+      "occurred_at",
+      "thread_id",
+      "type"
+    ]
+  },
+  {
+    "name": "verify_contact_email",
+    "toolset": "contacts",
+    "scopes": [
+      "contacts:write"
+    ],
+    "annotations": {
+      "title": "Verify a contact’s email address now",
+      "readOnlyHint": false,
+      "idempotentHint": false,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "contactId"
+    ],
+    "required": [
+      "contactId"
+    ],
+    "output": [
+      "contact",
+      "details",
+      "suggestion"
+    ]
+  },
+  {
+    "name": "export_contact_data",
+    "toolset": "contacts",
+    "scopes": [
+      "contacts:read"
+    ],
+    "annotations": {
+      "title": "Export everything held about a contact",
+      "readOnlyHint": true,
+      "idempotentHint": false,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "contactId"
+    ],
+    "required": [
+      "contactId"
+    ],
+    "output": [
+      "activities",
+      "contact",
+      "exported_at",
+      "lists",
+      "suppressions",
+      "tags",
+      "threads"
+    ]
+  },
+  {
+    "name": "list_duplicate_contacts",
+    "toolset": "contacts",
+    "scopes": [
+      "contacts:read"
+    ],
+    "annotations": {
+      "title": "Find contacts that are probably the same person",
+      "readOnlyHint": true,
+      "idempotentHint": false,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "cursor",
+      "limit"
+    ],
+    "required": [],
+    "output": [
+      "data",
+      "next_cursor"
+    ]
+  },
+  {
+    "name": "create_import",
+    "toolset": "contacts",
+    "scopes": [
+      "contacts:write"
+    ],
+    "annotations": {
+      "title": "Upload a CSV file of contacts",
+      "readOnlyHint": false,
+      "idempotentHint": false,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "content",
+      "filename",
+      "idempotency_key"
+    ],
+    "required": [
+      "filename",
+      "content"
+    ],
+    "output": [
+      "created_at",
+      "created_count",
+      "dedupe_strategy",
+      "error_count",
+      "errors",
+      "filename",
+      "finished_at",
+      "headers",
+      "id",
+      "list_id",
+      "mapping",
+      "processed_rows",
+      "sample_rows",
+      "skipped_count",
+      "status",
+      "suggested_mapping",
+      "tag_ids",
+      "total_rows",
+      "updated_count"
+    ]
+  },
+  {
+    "name": "get_import",
+    "toolset": "contacts",
+    "scopes": [
+      "contacts:read"
+    ],
+    "annotations": {
+      "title": "Get an import with its progress and errors",
+      "readOnlyHint": true,
+      "idempotentHint": false,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "importId"
+    ],
+    "required": [
+      "importId"
+    ],
+    "output": [
+      "created_at",
+      "created_count",
+      "dedupe_strategy",
+      "error_count",
+      "errors",
+      "filename",
+      "finished_at",
+      "headers",
+      "id",
+      "list_id",
+      "mapping",
+      "processed_rows",
+      "sample_rows",
+      "skipped_count",
+      "status",
+      "suggested_mapping",
+      "tag_ids",
+      "total_rows",
+      "updated_count"
+    ]
+  },
+  {
+    "name": "preview_import",
+    "toolset": "contacts",
+    "scopes": [
+      "contacts:write"
+    ],
+    "annotations": {
+      "title": "Dry-run an import: what it would create, update and skip",
+      "readOnlyHint": false,
+      "idempotentHint": false,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "consent_basis",
+      "dedupe_strategy",
+      "importId",
+      "list_id",
+      "mapping",
+      "owner_user_id",
+      "tag_ids"
+    ],
+    "required": [
+      "importId",
+      "mapping"
+    ],
+    "output": [
+      "duplicates_in_file",
+      "errors",
+      "invalid",
+      "new",
+      "skip",
+      "suppressed",
+      "update"
+    ]
+  },
+  {
+    "name": "commit_import",
+    "toolset": "contacts",
+    "scopes": [
+      "contacts:write"
+    ],
+    "annotations": {
+      "title": "Import the contacts in an uploaded file",
+      "readOnlyHint": false,
+      "idempotentHint": false,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "consent_basis",
+      "dedupe_strategy",
+      "idempotency_key",
+      "importId",
+      "list_id",
+      "mapping",
+      "owner_user_id",
+      "tag_ids"
+    ],
+    "required": [
+      "importId",
+      "mapping"
+    ],
+    "output": [
+      "created_at",
+      "created_count",
+      "dedupe_strategy",
+      "error_count",
+      "errors",
+      "filename",
+      "finished_at",
+      "headers",
+      "id",
+      "list_id",
+      "mapping",
+      "processed_rows",
+      "sample_rows",
+      "skipped_count",
+      "status",
+      "suggested_mapping",
+      "tag_ids",
+      "total_rows",
+      "updated_count"
+    ]
+  },
+  {
+    "name": "list_companies",
+    "toolset": "contacts",
+    "scopes": [
+      "contacts:read"
+    ],
+    "annotations": {
+      "title": "List and search companies",
+      "readOnlyHint": true,
+      "idempotentHint": false,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "cursor",
+      "limit",
+      "q",
+      "sort"
+    ],
+    "required": [],
+    "output": [
+      "data",
+      "next_cursor"
+    ]
+  },
+  {
+    "name": "create_company",
+    "toolset": "contacts",
+    "scopes": [
+      "contacts:write"
+    ],
+    "annotations": {
+      "title": "Create a company",
+      "readOnlyHint": false,
+      "idempotentHint": false,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "country",
+      "custom_fields",
+      "domain",
+      "employee_range",
+      "idempotency_key",
+      "industry",
+      "name",
+      "notes",
+      "website"
+    ],
+    "required": [
+      "name"
+    ],
+    "output": [
+      "contact_count",
+      "country",
+      "created_at",
+      "custom_fields",
+      "domain",
+      "employee_range",
+      "id",
+      "industry",
+      "name",
+      "notes",
+      "updated_at",
+      "website"
+    ]
+  },
+  {
+    "name": "get_company",
+    "toolset": "contacts",
+    "scopes": [
+      "contacts:read"
+    ],
+    "annotations": {
+      "title": "Get one company",
+      "readOnlyHint": true,
+      "idempotentHint": false,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "companyId"
+    ],
+    "required": [
+      "companyId"
+    ],
+    "output": [
+      "contact_count",
+      "country",
+      "created_at",
+      "custom_fields",
+      "domain",
+      "employee_range",
+      "id",
+      "industry",
+      "name",
+      "notes",
+      "updated_at",
+      "website"
+    ]
+  },
+  {
+    "name": "update_company",
+    "toolset": "contacts",
+    "scopes": [
+      "contacts:write"
+    ],
+    "annotations": {
+      "title": "Change fields on a company",
+      "readOnlyHint": false,
+      "idempotentHint": true,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "companyId",
+      "country",
+      "custom_fields",
+      "domain",
+      "employee_range",
+      "if_match",
+      "industry",
+      "name",
+      "notes",
+      "website"
+    ],
+    "required": [
+      "companyId"
+    ],
+    "output": [
+      "contact_count",
+      "country",
+      "created_at",
+      "custom_fields",
+      "domain",
+      "employee_range",
+      "id",
+      "industry",
+      "name",
+      "notes",
+      "updated_at",
+      "website"
+    ]
+  },
+  {
+    "name": "delete_company",
+    "toolset": "contacts",
+    "scopes": [
+      "contacts:write"
+    ],
+    "annotations": {
+      "title": "Delete a company",
+      "readOnlyHint": false,
+      "idempotentHint": false,
+      "destructiveHint": true,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "companyId"
+    ],
+    "required": [
+      "companyId"
+    ],
+    "output": null
+  },
+  {
+    "name": "list_tags",
+    "toolset": "contacts",
+    "scopes": [
+      "contacts:read"
+    ],
+    "annotations": {
+      "title": "List tags",
+      "readOnlyHint": true,
+      "idempotentHint": false,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "cursor",
+      "limit"
+    ],
+    "required": [],
+    "output": [
+      "data",
+      "next_cursor"
+    ]
+  },
+  {
+    "name": "create_tag",
+    "toolset": "contacts",
+    "scopes": [
+      "contacts:write"
+    ],
+    "annotations": {
+      "title": "Create a tag",
+      "readOnlyHint": false,
+      "idempotentHint": false,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "color",
+      "idempotency_key",
+      "name"
+    ],
+    "required": [
+      "name"
+    ],
+    "output": [
+      "color",
+      "id",
+      "name"
+    ]
+  },
+  {
+    "name": "delete_tag",
+    "toolset": "contacts",
+    "scopes": [
+      "contacts:write"
+    ],
+    "annotations": {
+      "title": "Delete a tag",
+      "readOnlyHint": false,
+      "idempotentHint": false,
+      "destructiveHint": true,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "tagId"
+    ],
+    "required": [
+      "tagId"
+    ],
+    "output": null
+  },
+  {
+    "name": "list_lists",
+    "toolset": "contacts",
+    "scopes": [
+      "contacts:read"
+    ],
+    "annotations": {
+      "title": "List contact lists and segments",
+      "readOnlyHint": true,
+      "idempotentHint": false,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "cursor",
+      "kind",
+      "limit"
+    ],
+    "required": [],
+    "output": [
+      "data",
+      "next_cursor"
+    ]
+  },
+  {
+    "name": "create_list",
+    "toolset": "contacts",
+    "scopes": [
+      "contacts:write"
+    ],
+    "annotations": {
+      "title": "Create a static list or a dynamic segment",
+      "readOnlyHint": false,
+      "idempotentHint": false,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "contact_ids",
+      "filter",
+      "idempotency_key",
+      "kind",
+      "name"
+    ],
+    "required": [
+      "name",
+      "kind"
+    ],
+    "output": [
+      "created_at",
+      "created_by",
+      "filter",
+      "id",
+      "kind",
+      "member_count",
+      "name",
+      "updated_at"
+    ]
+  },
+  {
+    "name": "get_list",
+    "toolset": "contacts",
+    "scopes": [
+      "contacts:read"
+    ],
+    "annotations": {
+      "title": "Get one list",
+      "readOnlyHint": true,
+      "idempotentHint": false,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "listId"
+    ],
+    "required": [
+      "listId"
+    ],
+    "output": [
+      "created_at",
+      "created_by",
+      "filter",
+      "id",
+      "kind",
+      "member_count",
+      "name",
+      "updated_at"
+    ]
+  },
+  {
+    "name": "update_list",
+    "toolset": "contacts",
+    "scopes": [
+      "contacts:write"
+    ],
+    "annotations": {
+      "title": "Rename a list or change a segment filter",
+      "readOnlyHint": false,
+      "idempotentHint": true,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "filter",
+      "if_match",
+      "listId",
+      "name"
+    ],
+    "required": [
+      "listId"
+    ],
+    "output": [
+      "created_at",
+      "created_by",
+      "filter",
+      "id",
+      "kind",
+      "member_count",
+      "name",
+      "updated_at"
+    ]
+  },
+  {
+    "name": "delete_list",
+    "toolset": "contacts",
+    "scopes": [
+      "contacts:write"
+    ],
+    "annotations": {
+      "title": "Delete a list",
+      "readOnlyHint": false,
+      "idempotentHint": false,
+      "destructiveHint": true,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "listId"
+    ],
+    "required": [
+      "listId"
+    ],
+    "output": null
+  },
+  {
+    "name": "list_list_members",
+    "toolset": "contacts",
+    "scopes": [
+      "contacts:read"
+    ],
+    "annotations": {
+      "title": "List the contacts in a list",
+      "readOnlyHint": true,
+      "idempotentHint": false,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "cursor",
+      "limit",
+      "listId"
+    ],
+    "required": [
+      "listId"
+    ],
+    "output": [
+      "data",
+      "next_cursor"
+    ]
+  },
+  {
+    "name": "add_list_members",
+    "toolset": "contacts",
+    "scopes": [
+      "contacts:write"
+    ],
+    "annotations": {
+      "title": "Add contacts to a static list",
+      "readOnlyHint": false,
+      "idempotentHint": false,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "contact_ids",
+      "idempotency_key",
+      "listId"
+    ],
+    "required": [
+      "listId",
+      "contact_ids"
+    ],
+    "output": [
+      "changed",
+      "unchanged"
+    ]
+  },
+  {
+    "name": "remove_list_members",
+    "toolset": "contacts",
+    "scopes": [
+      "contacts:write"
+    ],
+    "annotations": {
+      "title": "Remove contacts from a static list",
+      "readOnlyHint": false,
+      "idempotentHint": false,
+      "destructiveHint": true,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "contact_ids",
+      "listId"
+    ],
+    "required": [
+      "listId",
+      "contact_ids"
+    ],
+    "output": [
+      "changed",
+      "unchanged"
+    ]
+  },
+  {
+    "name": "preview_segment",
+    "toolset": "contacts",
+    "scopes": [
+      "contacts:read"
+    ],
+    "annotations": {
+      "title": "Count and sample the contacts a filter matches",
+      "readOnlyHint": false,
+      "idempotentHint": false,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "filter"
+    ],
+    "required": [
+      "filter"
+    ],
+    "output": [
+      "count",
+      "sample"
+    ]
+  },
+  {
+    "name": "list_custom_fields",
+    "toolset": "admin",
+    "scopes": [
+      "settings:manage"
+    ],
+    "annotations": {
+      "title": "List custom field definitions",
+      "readOnlyHint": true,
+      "idempotentHint": false,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "cursor",
+      "entity",
+      "limit"
+    ],
+    "required": [],
+    "output": [
+      "data",
+      "next_cursor"
+    ]
+  },
+  {
+    "name": "create_custom_field",
+    "toolset": "admin",
+    "scopes": [
+      "settings:manage"
+    ],
+    "annotations": {
+      "title": "Define a custom field",
+      "readOnlyHint": false,
+      "idempotentHint": false,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "entity",
+      "idempotency_key",
+      "key",
+      "label",
+      "options",
+      "required",
+      "type"
+    ],
+    "required": [
+      "entity",
+      "key",
+      "label",
+      "type"
+    ],
+    "output": [
+      "entity",
+      "id",
+      "key",
+      "label",
+      "options",
+      "required",
+      "type"
+    ]
+  },
+  {
+    "name": "update_custom_field",
+    "toolset": "admin",
+    "scopes": [
+      "settings:manage"
+    ],
+    "annotations": {
+      "title": "Change a custom field’s label, options or required flag",
+      "readOnlyHint": false,
+      "idempotentHint": true,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "fieldId",
+      "label",
+      "options",
+      "required"
+    ],
+    "required": [
+      "fieldId"
+    ],
+    "output": [
+      "entity",
+      "id",
+      "key",
+      "label",
+      "options",
+      "required",
+      "type"
+    ]
+  },
+  {
+    "name": "delete_custom_field",
+    "toolset": "admin",
+    "scopes": [
+      "settings:manage"
+    ],
+    "annotations": {
+      "title": "Delete a custom field definition",
+      "readOnlyHint": false,
+      "idempotentHint": false,
+      "destructiveHint": true,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "fieldId"
+    ],
+    "required": [
+      "fieldId"
+    ],
+    "output": null
+  },
+  {
+    "name": "list_suppressions",
+    "toolset": "contacts",
+    "scopes": [
+      "contacts:read"
+    ],
+    "annotations": {
+      "title": "List suppressed addresses and domains",
+      "readOnlyHint": true,
+      "idempotentHint": false,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "cursor",
+      "limit",
+      "q",
+      "reason"
+    ],
+    "required": [],
+    "output": [
+      "data",
+      "next_cursor"
+    ]
+  },
+  {
+    "name": "create_suppression",
+    "toolset": "contacts",
+    "scopes": [
+      "contacts:write"
+    ],
+    "annotations": {
+      "title": "Suppress an address or a domain",
+      "readOnlyHint": false,
+      "idempotentHint": false,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "domain",
+      "email",
+      "idempotency_key",
+      "note",
+      "reason"
+    ],
+    "required": [],
+    "output": [
+      "created_at",
+      "created_by",
+      "domain",
+      "email",
+      "hashed_only",
+      "id",
+      "note",
+      "reason",
+      "source"
+    ]
+  },
+  {
+    "name": "delete_suppression",
+    "toolset": "admin",
+    "scopes": [
+      "settings:manage"
+    ],
+    "annotations": {
+      "title": "Remove a suppression",
+      "readOnlyHint": false,
+      "idempotentHint": false,
+      "destructiveHint": true,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "suppressionId"
+    ],
+    "required": [
+      "suppressionId"
+    ],
+    "output": null
+  },
+  {
+    "name": "check_suppression",
+    "toolset": "contacts",
+    "scopes": [
+      "contacts:read"
+    ],
+    "annotations": {
+      "title": "Check whether an address may be emailed",
+      "readOnlyHint": true,
+      "idempotentHint": false,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "email"
+    ],
+    "required": [
+      "email"
+    ],
+    "output": [
+      "blocked",
+      "contact_id",
+      "email",
+      "reasons",
+      "suppressions"
+    ]
+  },
+  {
+    "name": "list_campaigns",
+    "toolset": "campaigns",
+    "scopes": [
+      "campaigns:read"
+    ],
+    "annotations": {
+      "title": "List campaigns",
+      "readOnlyHint": true,
+      "idempotentHint": false,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "cursor",
+      "limit",
+      "status"
+    ],
+    "required": [],
+    "output": [
+      "data",
+      "next_cursor"
+    ]
+  },
+  {
+    "name": "create_campaign",
+    "toolset": "campaigns",
+    "scopes": [
+      "campaigns:write"
+    ],
+    "annotations": {
+      "title": "Create a draft campaign",
+      "readOnlyHint": false,
+      "idempotentHint": false,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "agent_mode",
+      "description",
+      "goals",
+      "idempotency_key",
+      "initial_email",
+      "links",
+      "name",
+      "objective",
+      "persona"
+    ],
+    "required": [
+      "name",
+      "objective"
+    ],
+    "output": [
+      "agent_instructions",
+      "agent_mode",
+      "archived_at",
+      "auto_send_min_confidence",
+      "autonomy",
+      "blackout_dates",
+      "click_tracking",
+      "completed_at",
+      "created_at",
+      "daily_new_threads_limit",
+      "delivery_grace_minutes",
+      "description",
+      "enrollment_rules",
+      "final_wait_business_days",
+      "goal_auto_confirm_threshold",
+      "goal_count",
+      "id",
+      "launched_at",
+      "links",
+      "list_unsubscribe_header",
+      "mailboxes",
+      "max_ai_replies_per_thread",
+      "name",
+      "objective",
+      "on_not_interested",
+      "open_tracking",
+      "owner_user_id",
+      "pause_on_manual_reply",
+      "persona",
+      "reply_delay_max_minutes",
+      "reply_delay_min_minutes",
+      "review_first_n_personalized",
+      "sending_priority",
+      "sending_window",
+      "status",
+      "thread_count",
+      "track_first_touch",
+      "unsubscribe_footer",
+      "updated_at"
+    ]
+  },
+  {
+    "name": "get_campaign",
+    "toolset": "campaigns",
+    "scopes": [
+      "campaigns:read"
+    ],
+    "annotations": {
+      "title": "Get one campaign",
+      "readOnlyHint": true,
+      "idempotentHint": false,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "campaignId"
+    ],
+    "required": [
+      "campaignId"
+    ],
+    "output": [
+      "agent_instructions",
+      "agent_mode",
+      "archived_at",
+      "auto_send_min_confidence",
+      "autonomy",
+      "blackout_dates",
+      "click_tracking",
+      "completed_at",
+      "created_at",
+      "daily_new_threads_limit",
+      "delivery_grace_minutes",
+      "description",
+      "enrollment_rules",
+      "final_wait_business_days",
+      "goal_auto_confirm_threshold",
+      "goal_count",
+      "id",
+      "launched_at",
+      "links",
+      "list_unsubscribe_header",
+      "mailboxes",
+      "max_ai_replies_per_thread",
+      "name",
+      "objective",
+      "on_not_interested",
+      "open_tracking",
+      "owner_user_id",
+      "pause_on_manual_reply",
+      "persona",
+      "reply_delay_max_minutes",
+      "reply_delay_min_minutes",
+      "review_first_n_personalized",
+      "sending_priority",
+      "sending_window",
+      "status",
+      "thread_count",
+      "track_first_touch",
+      "unsubscribe_footer",
+      "updated_at"
+    ]
+  },
+  {
+    "name": "update_campaign",
+    "toolset": "campaigns",
+    "scopes": [
+      "campaigns:write"
+    ],
+    "annotations": {
+      "title": "Change a campaign’s settings",
+      "readOnlyHint": false,
+      "idempotentHint": true,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "agent_instructions",
+      "agent_mode",
+      "auto_send_min_confidence",
+      "autonomy",
+      "blackout_dates",
+      "campaignId",
+      "click_tracking",
+      "daily_new_threads_limit",
+      "delivery_grace_minutes",
+      "description",
+      "enrollment_rules",
+      "final_wait_business_days",
+      "goal_auto_confirm_threshold",
+      "if_match",
+      "links",
+      "list_unsubscribe_header",
+      "max_ai_replies_per_thread",
+      "name",
+      "objective",
+      "on_not_interested",
+      "open_tracking",
+      "owner_user_id",
+      "pause_on_manual_reply",
+      "persona",
+      "reply_delay_max_minutes",
+      "reply_delay_min_minutes",
+      "review_first_n_personalized",
+      "sending_priority",
+      "sending_window",
+      "track_first_touch",
+      "unsubscribe_footer"
+    ],
+    "required": [
+      "campaignId"
+    ],
+    "output": [
+      "agent_instructions",
+      "agent_mode",
+      "archived_at",
+      "auto_send_min_confidence",
+      "autonomy",
+      "blackout_dates",
+      "click_tracking",
+      "completed_at",
+      "created_at",
+      "daily_new_threads_limit",
+      "delivery_grace_minutes",
+      "description",
+      "enrollment_rules",
+      "final_wait_business_days",
+      "goal_auto_confirm_threshold",
+      "goal_count",
+      "id",
+      "launched_at",
+      "links",
+      "list_unsubscribe_header",
+      "mailboxes",
+      "max_ai_replies_per_thread",
+      "name",
+      "objective",
+      "on_not_interested",
+      "open_tracking",
+      "owner_user_id",
+      "pause_on_manual_reply",
+      "persona",
+      "reply_delay_max_minutes",
+      "reply_delay_min_minutes",
+      "review_first_n_personalized",
+      "sending_priority",
+      "sending_window",
+      "status",
+      "thread_count",
+      "track_first_touch",
+      "unsubscribe_footer",
+      "updated_at"
+    ]
+  },
+  {
+    "name": "delete_campaign",
+    "toolset": "campaigns",
+    "scopes": [
+      "campaigns:write"
+    ],
+    "annotations": {
+      "title": "Delete a draft campaign",
+      "readOnlyHint": false,
+      "idempotentHint": false,
+      "destructiveHint": true,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "campaignId"
+    ],
+    "required": [
+      "campaignId"
+    ],
+    "output": null
+  },
+  {
+    "name": "archive_campaign",
+    "toolset": "campaigns",
+    "scopes": [
+      "campaigns:write"
+    ],
+    "annotations": {
+      "title": "Archive a campaign",
+      "readOnlyHint": false,
+      "idempotentHint": false,
+      "destructiveHint": true,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "campaignId",
+      "idempotency_key"
+    ],
+    "required": [
+      "campaignId"
+    ],
+    "output": [
+      "agent_instructions",
+      "agent_mode",
+      "archived_at",
+      "auto_send_min_confidence",
+      "autonomy",
+      "blackout_dates",
+      "click_tracking",
+      "completed_at",
+      "created_at",
+      "daily_new_threads_limit",
+      "delivery_grace_minutes",
+      "description",
+      "enrollment_rules",
+      "final_wait_business_days",
+      "goal_auto_confirm_threshold",
+      "goal_count",
+      "id",
+      "launched_at",
+      "links",
+      "list_unsubscribe_header",
+      "mailboxes",
+      "max_ai_replies_per_thread",
+      "name",
+      "objective",
+      "on_not_interested",
+      "open_tracking",
+      "owner_user_id",
+      "pause_on_manual_reply",
+      "persona",
+      "reply_delay_max_minutes",
+      "reply_delay_min_minutes",
+      "review_first_n_personalized",
+      "sending_priority",
+      "sending_window",
+      "status",
+      "thread_count",
+      "track_first_touch",
+      "unsubscribe_footer",
+      "updated_at"
+    ]
+  },
+  {
+    "name": "run_campaign_preflight",
+    "toolset": "campaigns",
+    "scopes": [
+      "campaigns:read"
+    ],
+    "annotations": {
+      "title": "Check whether a campaign is ready to launch",
+      "readOnlyHint": true,
+      "idempotentHint": false,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "campaignId"
+    ],
+    "required": [
+      "campaignId"
+    ],
+    "output": [
+      "audience",
+      "items",
+      "passed"
+    ]
+  },
+  {
+    "name": "launch_campaign",
+    "toolset": "campaigns",
+    "scopes": [
+      "campaigns:write",
+      "messages:send"
+    ],
+    "annotations": {
+      "title": "Launch a campaign: start sending to enrolled contacts",
+      "readOnlyHint": false,
+      "idempotentHint": false,
+      "destructiveHint": false,
+      "openWorldHint": true
+    },
+    "inputs": [
+      "campaignId",
+      "idempotency_key"
+    ],
+    "required": [
+      "campaignId"
+    ],
+    "output": [
+      "agent_instructions",
+      "agent_mode",
+      "archived_at",
+      "auto_send_min_confidence",
+      "autonomy",
+      "blackout_dates",
+      "click_tracking",
+      "completed_at",
+      "created_at",
+      "daily_new_threads_limit",
+      "delivery_grace_minutes",
+      "description",
+      "enrollment_rules",
+      "final_wait_business_days",
+      "goal_auto_confirm_threshold",
+      "goal_count",
+      "id",
+      "launched_at",
+      "links",
+      "list_unsubscribe_header",
+      "mailboxes",
+      "max_ai_replies_per_thread",
+      "name",
+      "objective",
+      "on_not_interested",
+      "open_tracking",
+      "owner_user_id",
+      "pause_on_manual_reply",
+      "persona",
+      "reply_delay_max_minutes",
+      "reply_delay_min_minutes",
+      "review_first_n_personalized",
+      "sending_priority",
+      "sending_window",
+      "status",
+      "thread_count",
+      "track_first_touch",
+      "unsubscribe_footer",
+      "updated_at"
+    ]
+  },
+  {
+    "name": "pause_campaign",
+    "toolset": "campaigns",
+    "scopes": [
+      "campaigns:write"
+    ],
+    "annotations": {
+      "title": "Pause a campaign’s sending",
+      "readOnlyHint": false,
+      "idempotentHint": false,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "campaignId",
+      "idempotency_key"
+    ],
+    "required": [
+      "campaignId"
+    ],
+    "output": [
+      "agent_instructions",
+      "agent_mode",
+      "archived_at",
+      "auto_send_min_confidence",
+      "autonomy",
+      "blackout_dates",
+      "click_tracking",
+      "completed_at",
+      "created_at",
+      "daily_new_threads_limit",
+      "delivery_grace_minutes",
+      "description",
+      "enrollment_rules",
+      "final_wait_business_days",
+      "goal_auto_confirm_threshold",
+      "goal_count",
+      "id",
+      "launched_at",
+      "links",
+      "list_unsubscribe_header",
+      "mailboxes",
+      "max_ai_replies_per_thread",
+      "name",
+      "objective",
+      "on_not_interested",
+      "open_tracking",
+      "owner_user_id",
+      "pause_on_manual_reply",
+      "persona",
+      "reply_delay_max_minutes",
+      "reply_delay_min_minutes",
+      "review_first_n_personalized",
+      "sending_priority",
+      "sending_window",
+      "status",
+      "thread_count",
+      "track_first_touch",
+      "unsubscribe_footer",
+      "updated_at"
+    ]
+  },
+  {
+    "name": "resume_campaign",
+    "toolset": "campaigns",
+    "scopes": [
+      "campaigns:write"
+    ],
+    "annotations": {
+      "title": "Resume a paused campaign",
+      "readOnlyHint": false,
+      "idempotentHint": false,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "campaignId",
+      "idempotency_key"
+    ],
+    "required": [
+      "campaignId"
+    ],
+    "output": [
+      "agent_instructions",
+      "agent_mode",
+      "archived_at",
+      "auto_send_min_confidence",
+      "autonomy",
+      "blackout_dates",
+      "click_tracking",
+      "completed_at",
+      "created_at",
+      "daily_new_threads_limit",
+      "delivery_grace_minutes",
+      "description",
+      "enrollment_rules",
+      "final_wait_business_days",
+      "goal_auto_confirm_threshold",
+      "goal_count",
+      "id",
+      "launched_at",
+      "links",
+      "list_unsubscribe_header",
+      "mailboxes",
+      "max_ai_replies_per_thread",
+      "name",
+      "objective",
+      "on_not_interested",
+      "open_tracking",
+      "owner_user_id",
+      "pause_on_manual_reply",
+      "persona",
+      "reply_delay_max_minutes",
+      "reply_delay_min_minutes",
+      "review_first_n_personalized",
+      "sending_priority",
+      "sending_window",
+      "status",
+      "thread_count",
+      "track_first_touch",
+      "unsubscribe_footer",
+      "updated_at"
+    ]
+  },
+  {
+    "name": "list_campaign_goals",
+    "toolset": "campaigns",
+    "scopes": [
+      "campaigns:read"
+    ],
+    "annotations": {
+      "title": "List a campaign’s goals in order",
+      "readOnlyHint": true,
+      "idempotentHint": false,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "campaignId"
+    ],
+    "required": [
+      "campaignId"
+    ],
+    "output": [
+      "data"
+    ]
+  },
+  {
+    "name": "create_campaign_goal",
+    "toolset": "campaigns",
+    "scopes": [
+      "campaigns:write"
+    ],
+    "annotations": {
+      "title": "Add a goal after the existing ones",
+      "readOnlyHint": false,
+      "idempotentHint": false,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "auto_confirm",
+      "campaignId",
+      "click_counts_as_achieved",
+      "detection_methods",
+      "external_event_match",
+      "idempotency_key",
+      "key",
+      "lifecycle_stage_on_achieve",
+      "marks_customer",
+      "name",
+      "playbook",
+      "success_criteria",
+      "tracked_link_key",
+      "value_cents"
+    ],
+    "required": [
+      "campaignId",
+      "key",
+      "name",
+      "success_criteria",
+      "playbook"
+    ],
+    "output": [
+      "auto_confirm",
+      "click_counts_as_achieved",
+      "detection_methods",
+      "external_event_match",
+      "id",
+      "key",
+      "lifecycle_stage_on_achieve",
+      "marks_customer",
+      "name",
+      "playbook",
+      "position",
+      "success_criteria",
+      "tracked_link_key",
+      "value_cents"
+    ]
+  },
+  {
+    "name": "update_campaign_goal",
+    "toolset": "campaigns",
+    "scopes": [
+      "campaigns:write"
+    ],
+    "annotations": {
+      "title": "Change a goal",
+      "readOnlyHint": false,
+      "idempotentHint": true,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "auto_confirm",
+      "campaignId",
+      "click_counts_as_achieved",
+      "detection_methods",
+      "external_event_match",
+      "goalId",
+      "key",
+      "lifecycle_stage_on_achieve",
+      "marks_customer",
+      "name",
+      "playbook",
+      "success_criteria",
+      "tracked_link_key",
+      "value_cents"
+    ],
+    "required": [
+      "campaignId",
+      "goalId"
+    ],
+    "output": [
+      "auto_confirm",
+      "click_counts_as_achieved",
+      "detection_methods",
+      "external_event_match",
+      "id",
+      "key",
+      "lifecycle_stage_on_achieve",
+      "marks_customer",
+      "name",
+      "playbook",
+      "position",
+      "success_criteria",
+      "tracked_link_key",
+      "value_cents"
+    ]
+  },
+  {
+    "name": "delete_campaign_goal",
+    "toolset": "campaigns",
+    "scopes": [
+      "campaigns:write"
+    ],
+    "annotations": {
+      "title": "Delete a goal",
+      "readOnlyHint": false,
+      "idempotentHint": false,
+      "destructiveHint": true,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "campaignId",
+      "goalId"
+    ],
+    "required": [
+      "campaignId",
+      "goalId"
+    ],
+    "output": null
+  },
+  {
+    "name": "reorder_campaign_goals",
+    "toolset": "campaigns",
+    "scopes": [
+      "campaigns:write"
+    ],
+    "annotations": {
+      "title": "Put a campaign’s goals in a new order",
+      "readOnlyHint": false,
+      "idempotentHint": false,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "campaignId",
+      "goal_ids"
+    ],
+    "required": [
+      "campaignId",
+      "goal_ids"
+    ],
+    "output": [
+      "data"
+    ]
+  },
+  {
+    "name": "get_initial_email",
+    "toolset": "campaigns",
+    "scopes": [
+      "campaigns:read"
+    ],
+    "annotations": {
+      "title": "Get a campaign’s initial email and its variants",
+      "readOnlyHint": true,
+      "idempotentHint": false,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "campaignId"
+    ],
+    "required": [
+      "campaignId"
+    ],
+    "output": [
+      "ai_guidance",
+      "id",
+      "include_tracking",
+      "mode",
+      "position",
+      "send_as_reply",
+      "variants",
+      "wait",
+      "wait_from"
+    ]
+  },
+  {
+    "name": "update_initial_email",
+    "toolset": "campaigns",
+    "scopes": [
+      "campaigns:write"
+    ],
+    "annotations": {
+      "title": "Set the initial email’s mode, guidance and tracking",
+      "readOnlyHint": false,
+      "idempotentHint": true,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "ai_guidance",
+      "campaignId",
+      "include_tracking",
+      "mode"
+    ],
+    "required": [
+      "campaignId",
+      "mode"
+    ],
+    "output": [
+      "ai_guidance",
+      "id",
+      "include_tracking",
+      "mode",
+      "position",
+      "send_as_reply",
+      "variants",
+      "wait",
+      "wait_from"
+    ]
+  },
+  {
+    "name": "list_follow_up_sequences",
+    "toolset": "campaigns",
+    "scopes": [
+      "campaigns:read"
+    ],
+    "annotations": {
+      "title": "List follow-up sequences with the stage → sequence map",
+      "readOnlyHint": true,
+      "idempotentHint": false,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "campaignId"
+    ],
+    "required": [
+      "campaignId"
+    ],
+    "output": [
+      "data",
+      "stages"
+    ]
+  },
+  {
+    "name": "create_follow_up_sequence",
+    "toolset": "campaigns",
+    "scopes": [
+      "campaigns:write"
+    ],
+    "annotations": {
+      "title": "Create a follow-up sequence for one or more stages",
+      "readOnlyHint": false,
+      "idempotentHint": false,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "campaignId",
+      "final_wait",
+      "finish",
+      "idempotency_key",
+      "name",
+      "stages",
+      "steps"
+    ],
+    "required": [
+      "campaignId",
+      "name",
+      "stages",
+      "steps"
+    ],
+    "output": [
+      "active",
+      "created_at",
+      "final_wait",
+      "finish",
+      "id",
+      "name",
+      "stages",
+      "steps",
+      "updated_at"
+    ]
+  },
+  {
+    "name": "get_follow_up_sequence",
+    "toolset": "campaigns",
+    "scopes": [
+      "campaigns:read"
+    ],
+    "annotations": {
+      "title": "Get one follow-up sequence with its steps",
+      "readOnlyHint": true,
+      "idempotentHint": false,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "campaignId",
+      "sequenceId"
+    ],
+    "required": [
+      "campaignId",
+      "sequenceId"
+    ],
+    "output": [
+      "active",
+      "created_at",
+      "final_wait",
+      "finish",
+      "id",
+      "name",
+      "stages",
+      "steps",
+      "updated_at"
+    ]
+  },
+  {
+    "name": "update_follow_up_sequence",
+    "toolset": "campaigns",
+    "scopes": [
+      "campaigns:write"
+    ],
+    "annotations": {
+      "title": "Rename a sequence, change its stages, finish rule or wait, or pause it",
+      "readOnlyHint": false,
+      "idempotentHint": true,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "active",
+      "campaignId",
+      "final_wait",
+      "finish",
+      "name",
+      "sequenceId",
+      "stages"
+    ],
+    "required": [
+      "campaignId",
+      "sequenceId"
+    ],
+    "output": [
+      "active",
+      "created_at",
+      "final_wait",
+      "finish",
+      "id",
+      "name",
+      "stages",
+      "steps",
+      "updated_at"
+    ]
+  },
+  {
+    "name": "delete_follow_up_sequence",
+    "toolset": "campaigns",
+    "scopes": [
+      "campaigns:write"
+    ],
+    "annotations": {
+      "title": "Delete a follow-up sequence",
+      "readOnlyHint": false,
+      "idempotentHint": false,
+      "destructiveHint": true,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "campaignId",
+      "sequenceId"
+    ],
+    "required": [
+      "campaignId",
+      "sequenceId"
+    ],
+    "output": null
+  },
+  {
+    "name": "create_follow_up_step",
+    "toolset": "campaigns",
+    "scopes": [
+      "campaigns:write"
+    ],
+    "annotations": {
+      "title": "Add a step at the end of a follow-up sequence",
+      "readOnlyHint": false,
+      "idempotentHint": false,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "ai_guidance",
+      "campaignId",
+      "idempotency_key",
+      "include_tracking",
+      "mode",
+      "send_as_reply",
+      "sequenceId",
+      "variant",
+      "wait",
+      "wait_from"
+    ],
+    "required": [
+      "campaignId",
+      "sequenceId",
+      "wait",
+      "variant"
+    ],
+    "output": [
+      "ai_guidance",
+      "id",
+      "include_tracking",
+      "mode",
+      "position",
+      "send_as_reply",
+      "variants",
+      "wait",
+      "wait_from"
+    ]
+  },
+  {
+    "name": "update_follow_up_step",
+    "toolset": "campaigns",
+    "scopes": [
+      "campaigns:write"
+    ],
+    "annotations": {
+      "title": "Change a follow-up step’s wait, mode or guidance",
+      "readOnlyHint": false,
+      "idempotentHint": true,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "ai_guidance",
+      "campaignId",
+      "include_tracking",
+      "mode",
+      "send_as_reply",
+      "sequenceId",
+      "stepId",
+      "wait",
+      "wait_from"
+    ],
+    "required": [
+      "campaignId",
+      "sequenceId",
+      "stepId"
+    ],
+    "output": [
+      "ai_guidance",
+      "id",
+      "include_tracking",
+      "mode",
+      "position",
+      "send_as_reply",
+      "variants",
+      "wait",
+      "wait_from"
+    ]
+  },
+  {
+    "name": "delete_follow_up_step",
+    "toolset": "campaigns",
+    "scopes": [
+      "campaigns:write"
+    ],
+    "annotations": {
+      "title": "Delete a follow-up step",
+      "readOnlyHint": false,
+      "idempotentHint": false,
+      "destructiveHint": true,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "campaignId",
+      "sequenceId",
+      "stepId"
+    ],
+    "required": [
+      "campaignId",
+      "sequenceId",
+      "stepId"
+    ],
+    "output": null
+  },
+  {
+    "name": "reorder_follow_up_steps",
+    "toolset": "campaigns",
+    "scopes": [
+      "campaigns:write"
+    ],
+    "annotations": {
+      "title": "Put a sequence’s steps in a new order",
+      "readOnlyHint": false,
+      "idempotentHint": false,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "campaignId",
+      "sequenceId",
+      "step_ids"
+    ],
+    "required": [
+      "campaignId",
+      "sequenceId",
+      "step_ids"
+    ],
+    "output": [
+      "active",
+      "created_at",
+      "final_wait",
+      "finish",
+      "id",
+      "name",
+      "stages",
+      "steps",
+      "updated_at"
+    ]
+  },
+  {
+    "name": "create_step_variant",
+    "toolset": "campaigns",
+    "scopes": [
+      "campaigns:write"
+    ],
+    "annotations": {
+      "title": "Add an A/B variant to the initial email or a follow-up step",
+      "readOnlyHint": false,
+      "idempotentHint": false,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "active",
+      "body_template",
+      "campaignId",
+      "idempotency_key",
+      "label",
+      "stepId",
+      "subject_template",
+      "weight"
+    ],
+    "required": [
+      "campaignId",
+      "stepId",
+      "body_template"
+    ],
+    "output": [
+      "active",
+      "body_template",
+      "id",
+      "issues",
+      "label",
+      "subject_template",
+      "weight"
+    ]
+  },
+  {
+    "name": "update_step_variant",
+    "toolset": "campaigns",
+    "scopes": [
+      "campaigns:write"
+    ],
+    "annotations": {
+      "title": "Change a variant’s text, weight or label",
+      "readOnlyHint": false,
+      "idempotentHint": true,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "active",
+      "body_template",
+      "campaignId",
+      "label",
+      "stepId",
+      "subject_template",
+      "variantId",
+      "weight"
+    ],
+    "required": [
+      "campaignId",
+      "stepId",
+      "variantId"
+    ],
+    "output": [
+      "active",
+      "body_template",
+      "id",
+      "issues",
+      "label",
+      "subject_template",
+      "weight"
+    ]
+  },
+  {
+    "name": "delete_step_variant",
+    "toolset": "campaigns",
+    "scopes": [
+      "campaigns:write"
+    ],
+    "annotations": {
+      "title": "Delete a variant",
+      "readOnlyHint": false,
+      "idempotentHint": false,
+      "destructiveHint": true,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "campaignId",
+      "stepId",
+      "variantId"
+    ],
+    "required": [
+      "campaignId",
+      "stepId",
+      "variantId"
+    ],
+    "output": null
+  },
+  {
+    "name": "preview_campaign_step",
+    "toolset": "campaigns",
+    "scopes": [
+      "campaigns:read"
+    ],
+    "annotations": {
+      "title": "Render a step for a contact, with its lint result",
+      "readOnlyHint": false,
+      "idempotentHint": false,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "campaignId",
+      "contact_id",
+      "stepId",
+      "thread_id",
+      "variant_id"
+    ],
+    "required": [
+      "campaignId",
+      "stepId"
+    ],
+    "output": [
+      "body_text",
+      "lint",
+      "note",
+      "sendable",
+      "subject",
+      "template_issues",
+      "variant_id"
+    ]
+  },
+  {
+    "name": "set_campaign_mailboxes",
+    "toolset": "campaigns",
+    "scopes": [
+      "campaigns:write"
+    ],
+    "annotations": {
+      "title": "Choose the mailboxes a campaign sends from",
+      "readOnlyHint": false,
+      "idempotentHint": true,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "campaignId",
+      "mailboxes"
+    ],
+    "required": [
+      "campaignId",
+      "mailboxes"
+    ],
+    "output": [
+      "agent_instructions",
+      "agent_mode",
+      "archived_at",
+      "auto_send_min_confidence",
+      "autonomy",
+      "blackout_dates",
+      "click_tracking",
+      "completed_at",
+      "created_at",
+      "daily_new_threads_limit",
+      "delivery_grace_minutes",
+      "description",
+      "enrollment_rules",
+      "final_wait_business_days",
+      "goal_auto_confirm_threshold",
+      "goal_count",
+      "id",
+      "launched_at",
+      "links",
+      "list_unsubscribe_header",
+      "mailboxes",
+      "max_ai_replies_per_thread",
+      "name",
+      "objective",
+      "on_not_interested",
+      "open_tracking",
+      "owner_user_id",
+      "pause_on_manual_reply",
+      "persona",
+      "reply_delay_max_minutes",
+      "reply_delay_min_minutes",
+      "review_first_n_personalized",
+      "sending_priority",
+      "sending_window",
+      "status",
+      "thread_count",
+      "track_first_touch",
+      "unsubscribe_footer",
+      "updated_at"
+    ]
+  },
+  {
+    "name": "enroll_contacts",
+    "toolset": "campaigns",
+    "scopes": [
+      "campaigns:write"
+    ],
+    "annotations": {
+      "title": "Enroll contacts in a campaign",
+      "readOnlyHint": false,
+      "idempotentHint": false,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "campaignId",
+      "contact_ids",
+      "idempotency_key",
+      "list_id"
+    ],
+    "required": [
+      "campaignId"
+    ],
+    "output": [
+      "created",
+      "skipped"
+    ]
+  },
+  {
+    "name": "list_threads",
+    "toolset": "threads",
+    "scopes": [
+      "threads:read"
+    ],
+    "annotations": {
+      "title": "List and filter threads (the Inbox)",
+      "readOnlyHint": true,
+      "idempotentHint": false,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "assigned_to",
+      "campaign_id",
+      "contact_id",
+      "cursor",
+      "goal_id",
+      "intent",
+      "limit",
+      "mailbox_id",
+      "min_stage_rank",
+      "min_temperature",
+      "needs_attention",
+      "open_status",
+      "q",
+      "sort",
+      "stage",
+      "state",
+      "updated_after"
+    ],
+    "required": [],
+    "output": [
+      "data",
+      "next_cursor"
+    ]
+  },
+  {
+    "name": "get_thread",
+    "toolset": "threads",
+    "scopes": [
+      "threads:read"
+    ],
+    "annotations": {
+      "title": "Get one thread",
+      "readOnlyHint": true,
+      "idempotentHint": false,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "threadId"
+    ],
+    "required": [
+      "threadId"
+    ],
+    "output": [
+      "achieved_goal_id",
+      "ai_paused",
+      "ai_replies_sent",
+      "assigned_user_id",
+      "campaign",
+      "classification",
+      "closed_at",
+      "closed_reason",
+      "completed_at",
+      "contact",
+      "created_at",
+      "first_sent_at",
+      "follow_up",
+      "id",
+      "last_inbound_at",
+      "last_message_at",
+      "last_outbound_at",
+      "mailbox_id",
+      "manual_floor_rank",
+      "manually_paused",
+      "next_action",
+      "open",
+      "open_escalations",
+      "received_at",
+      "responded_at",
+      "stage",
+      "stage_label",
+      "stage_rank",
+      "state",
+      "state_reason",
+      "subject",
+      "summary",
+      "updated_at"
+    ]
+  },
+  {
+    "name": "update_thread",
+    "toolset": "threads",
+    "scopes": [
+      "threads:write"
+    ],
+    "annotations": {
+      "title": "Assign a thread, or take it over from the agent",
+      "readOnlyHint": false,
+      "idempotentHint": true,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "ai_paused",
+      "assigned_user_id",
+      "if_match",
+      "threadId"
+    ],
+    "required": [
+      "threadId"
+    ],
+    "output": [
+      "achieved_goal_id",
+      "ai_paused",
+      "ai_replies_sent",
+      "assigned_user_id",
+      "campaign",
+      "classification",
+      "closed_at",
+      "closed_reason",
+      "completed_at",
+      "contact",
+      "created_at",
+      "first_sent_at",
+      "follow_up",
+      "id",
+      "last_inbound_at",
+      "last_message_at",
+      "last_outbound_at",
+      "mailbox_id",
+      "manual_floor_rank",
+      "manually_paused",
+      "next_action",
+      "open",
+      "open_escalations",
+      "received_at",
+      "responded_at",
+      "stage",
+      "stage_label",
+      "stage_rank",
+      "state",
+      "state_reason",
+      "subject",
+      "summary",
+      "updated_at"
+    ]
+  },
+  {
+    "name": "get_thread_context",
+    "toolset": "threads",
+    "scopes": [
+      "threads:read"
+    ],
+    "annotations": {
+      "title": "Get an LLM-ready bundle of everything about a thread",
+      "readOnlyHint": true,
+      "idempotentHint": false,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "threadId"
+    ],
+    "required": [
+      "threadId"
+    ],
+    "output": [
+      "allowed_links",
+      "constraints",
+      "kb_items",
+      "markdown",
+      "thread_id"
+    ]
+  },
+  {
+    "name": "list_thread_messages",
+    "toolset": "threads",
+    "scopes": [
+      "threads:read"
+    ],
+    "annotations": {
+      "title": "List the emails in a thread",
+      "readOnlyHint": true,
+      "idempotentHint": false,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "cursor",
+      "limit",
+      "threadId"
+    ],
+    "required": [
+      "threadId"
+    ],
+    "output": [
+      "data",
+      "next_cursor"
+    ]
+  },
+  {
+    "name": "list_thread_activity",
+    "toolset": "threads",
+    "scopes": [
+      "threads:read"
+    ],
+    "annotations": {
+      "title": "List what happened on a thread",
+      "readOnlyHint": true,
+      "idempotentHint": false,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "cursor",
+      "limit",
+      "threadId"
+    ],
+    "required": [
+      "threadId"
+    ],
+    "output": [
+      "data",
+      "next_cursor"
+    ]
+  },
+  {
+    "name": "list_thread_classifications",
+    "toolset": "threads",
+    "scopes": [
+      "threads:read"
+    ],
+    "annotations": {
+      "title": "List every classification of a thread, newest first",
+      "readOnlyHint": true,
+      "idempotentHint": false,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "cursor",
+      "limit",
+      "threadId"
+    ],
+    "required": [
+      "threadId"
+    ],
+    "output": [
+      "data",
+      "next_cursor"
+    ]
+  },
+  {
+    "name": "reclassify_thread",
+    "toolset": "threads",
+    "scopes": [
+      "threads:write"
+    ],
+    "annotations": {
+      "title": "Classify the conversation again now",
+      "readOnlyHint": false,
+      "idempotentHint": false,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "threadId"
+    ],
+    "required": [
+      "threadId"
+    ],
+    "output": [
+      "classifier_version",
+      "created_at",
+      "id",
+      "model",
+      "output",
+      "provider",
+      "status",
+      "trigger_message_id"
+    ]
+  },
+  {
+    "name": "mark_goal_achieved",
+    "toolset": "threads",
+    "scopes": [
+      "threads:write"
+    ],
+    "annotations": {
+      "title": "Mark a goal achieved on a thread",
+      "readOnlyHint": false,
+      "idempotentHint": false,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "event_at",
+      "goalId",
+      "idempotency_key",
+      "note",
+      "threadId"
+    ],
+    "required": [
+      "threadId",
+      "goalId"
+    ],
+    "output": [
+      "achieved_goal_id",
+      "ai_paused",
+      "ai_replies_sent",
+      "assigned_user_id",
+      "campaign",
+      "classification",
+      "closed_at",
+      "closed_reason",
+      "completed_at",
+      "contact",
+      "created_at",
+      "first_sent_at",
+      "follow_up",
+      "id",
+      "last_inbound_at",
+      "last_message_at",
+      "last_outbound_at",
+      "mailbox_id",
+      "manual_floor_rank",
+      "manually_paused",
+      "next_action",
+      "open",
+      "open_escalations",
+      "received_at",
+      "responded_at",
+      "stage",
+      "stage_label",
+      "stage_rank",
+      "state",
+      "state_reason",
+      "subject",
+      "summary",
+      "updated_at"
+    ]
+  },
+  {
+    "name": "revoke_goal_achievement",
+    "toolset": "threads",
+    "scopes": [
+      "threads:write"
+    ],
+    "annotations": {
+      "title": "Revoke a goal achievement that was wrong",
+      "readOnlyHint": false,
+      "idempotentHint": false,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "goalId",
+      "reason",
+      "threadId"
+    ],
+    "required": [
+      "threadId",
+      "goalId",
+      "reason"
+    ],
+    "output": [
+      "achieved_goal_id",
+      "ai_paused",
+      "ai_replies_sent",
+      "assigned_user_id",
+      "campaign",
+      "classification",
+      "closed_at",
+      "closed_reason",
+      "completed_at",
+      "contact",
+      "created_at",
+      "first_sent_at",
+      "follow_up",
+      "id",
+      "last_inbound_at",
+      "last_message_at",
+      "last_outbound_at",
+      "mailbox_id",
+      "manual_floor_rank",
+      "manually_paused",
+      "next_action",
+      "open",
+      "open_escalations",
+      "received_at",
+      "responded_at",
+      "stage",
+      "stage_label",
+      "stage_rank",
+      "state",
+      "state_reason",
+      "subject",
+      "summary",
+      "updated_at"
+    ]
+  },
+  {
+    "name": "set_thread_stage_floor",
+    "toolset": "threads",
+    "scopes": [
+      "threads:write"
+    ],
+    "annotations": {
+      "title": "Move a thread forward without email evidence",
+      "readOnlyHint": false,
+      "idempotentHint": false,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "reason",
+      "stage",
+      "threadId"
+    ],
+    "required": [
+      "threadId",
+      "stage",
+      "reason"
+    ],
+    "output": [
+      "achieved_goal_id",
+      "ai_paused",
+      "ai_replies_sent",
+      "assigned_user_id",
+      "campaign",
+      "classification",
+      "closed_at",
+      "closed_reason",
+      "completed_at",
+      "contact",
+      "created_at",
+      "first_sent_at",
+      "follow_up",
+      "id",
+      "last_inbound_at",
+      "last_message_at",
+      "last_outbound_at",
+      "mailbox_id",
+      "manual_floor_rank",
+      "manually_paused",
+      "next_action",
+      "open",
+      "open_escalations",
+      "received_at",
+      "responded_at",
+      "stage",
+      "stage_label",
+      "stage_rank",
+      "state",
+      "state_reason",
+      "subject",
+      "summary",
+      "updated_at"
+    ]
+  },
+  {
+    "name": "pause_thread",
+    "toolset": "threads",
+    "scopes": [
+      "threads:write"
+    ],
+    "annotations": {
+      "title": "Pause a thread",
+      "readOnlyHint": false,
+      "idempotentHint": false,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "threadId"
+    ],
+    "required": [
+      "threadId"
+    ],
+    "output": [
+      "achieved_goal_id",
+      "ai_paused",
+      "ai_replies_sent",
+      "assigned_user_id",
+      "campaign",
+      "classification",
+      "closed_at",
+      "closed_reason",
+      "completed_at",
+      "contact",
+      "created_at",
+      "first_sent_at",
+      "follow_up",
+      "id",
+      "last_inbound_at",
+      "last_message_at",
+      "last_outbound_at",
+      "mailbox_id",
+      "manual_floor_rank",
+      "manually_paused",
+      "next_action",
+      "open",
+      "open_escalations",
+      "received_at",
+      "responded_at",
+      "stage",
+      "stage_label",
+      "stage_rank",
+      "state",
+      "state_reason",
+      "subject",
+      "summary",
+      "updated_at"
+    ]
+  },
+  {
+    "name": "resume_thread",
+    "toolset": "threads",
+    "scopes": [
+      "threads:write"
+    ],
+    "annotations": {
+      "title": "Resume a paused thread",
+      "readOnlyHint": false,
+      "idempotentHint": false,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "threadId"
+    ],
+    "required": [
+      "threadId"
+    ],
+    "output": [
+      "achieved_goal_id",
+      "ai_paused",
+      "ai_replies_sent",
+      "assigned_user_id",
+      "campaign",
+      "classification",
+      "closed_at",
+      "closed_reason",
+      "completed_at",
+      "contact",
+      "created_at",
+      "first_sent_at",
+      "follow_up",
+      "id",
+      "last_inbound_at",
+      "last_message_at",
+      "last_outbound_at",
+      "mailbox_id",
+      "manual_floor_rank",
+      "manually_paused",
+      "next_action",
+      "open",
+      "open_escalations",
+      "received_at",
+      "responded_at",
+      "stage",
+      "stage_label",
+      "stage_rank",
+      "state",
+      "state_reason",
+      "subject",
+      "summary",
+      "updated_at"
+    ]
+  },
+  {
+    "name": "close_thread",
+    "toolset": "threads",
+    "scopes": [
+      "threads:write"
+    ],
+    "annotations": {
+      "title": "Close a thread as lost, or unsubscribe the contact",
+      "readOnlyHint": false,
+      "idempotentHint": false,
+      "destructiveHint": true,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "note",
+      "reason",
+      "threadId",
+      "unsubscribe"
+    ],
+    "required": [
+      "threadId",
+      "reason"
+    ],
+    "output": [
+      "achieved_goal_id",
+      "ai_paused",
+      "ai_replies_sent",
+      "assigned_user_id",
+      "campaign",
+      "classification",
+      "closed_at",
+      "closed_reason",
+      "completed_at",
+      "contact",
+      "created_at",
+      "first_sent_at",
+      "follow_up",
+      "id",
+      "last_inbound_at",
+      "last_message_at",
+      "last_outbound_at",
+      "mailbox_id",
+      "manual_floor_rank",
+      "manually_paused",
+      "next_action",
+      "open",
+      "open_escalations",
+      "received_at",
+      "responded_at",
+      "stage",
+      "stage_label",
+      "stage_rank",
+      "state",
+      "state_reason",
+      "subject",
+      "summary",
+      "updated_at"
+    ]
+  },
+  {
+    "name": "stop_follow_ups",
+    "toolset": "threads",
+    "scopes": [
+      "threads:write"
+    ],
+    "annotations": {
+      "title": "Stop follow-ups on a thread",
+      "readOnlyHint": false,
+      "idempotentHint": false,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "threadId"
+    ],
+    "required": [
+      "threadId"
+    ],
+    "output": [
+      "achieved_goal_id",
+      "ai_paused",
+      "ai_replies_sent",
+      "assigned_user_id",
+      "campaign",
+      "classification",
+      "closed_at",
+      "closed_reason",
+      "completed_at",
+      "contact",
+      "created_at",
+      "first_sent_at",
+      "follow_up",
+      "id",
+      "last_inbound_at",
+      "last_message_at",
+      "last_outbound_at",
+      "mailbox_id",
+      "manual_floor_rank",
+      "manually_paused",
+      "next_action",
+      "open",
+      "open_escalations",
+      "received_at",
+      "responded_at",
+      "stage",
+      "stage_label",
+      "stage_rank",
+      "state",
+      "state_reason",
+      "subject",
+      "summary",
+      "updated_at"
+    ]
+  },
+  {
+    "name": "resume_follow_ups",
+    "toolset": "threads",
+    "scopes": [
+      "threads:write"
+    ],
+    "annotations": {
+      "title": "Resume follow-ups on a thread",
+      "readOnlyHint": false,
+      "idempotentHint": false,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "threadId"
+    ],
+    "required": [
+      "threadId"
+    ],
+    "output": [
+      "achieved_goal_id",
+      "ai_paused",
+      "ai_replies_sent",
+      "assigned_user_id",
+      "campaign",
+      "classification",
+      "closed_at",
+      "closed_reason",
+      "completed_at",
+      "contact",
+      "created_at",
+      "first_sent_at",
+      "follow_up",
+      "id",
+      "last_inbound_at",
+      "last_message_at",
+      "last_outbound_at",
+      "mailbox_id",
+      "manual_floor_rank",
+      "manually_paused",
+      "next_action",
+      "open",
+      "open_escalations",
+      "received_at",
+      "responded_at",
+      "stage",
+      "stage_label",
+      "stage_rank",
+      "state",
+      "state_reason",
+      "subject",
+      "summary",
+      "updated_at"
+    ]
+  },
+  {
+    "name": "skip_next_action",
+    "toolset": "threads",
+    "scopes": [
+      "threads:write"
+    ],
+    "annotations": {
+      "title": "Skip the next follow-up",
+      "readOnlyHint": false,
+      "idempotentHint": false,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "threadId"
+    ],
+    "required": [
+      "threadId"
+    ],
+    "output": [
+      "achieved_goal_id",
+      "ai_paused",
+      "ai_replies_sent",
+      "assigned_user_id",
+      "campaign",
+      "classification",
+      "closed_at",
+      "closed_reason",
+      "completed_at",
+      "contact",
+      "created_at",
+      "first_sent_at",
+      "follow_up",
+      "id",
+      "last_inbound_at",
+      "last_message_at",
+      "last_outbound_at",
+      "mailbox_id",
+      "manual_floor_rank",
+      "manually_paused",
+      "next_action",
+      "open",
+      "open_escalations",
+      "received_at",
+      "responded_at",
+      "stage",
+      "stage_label",
+      "stage_rank",
+      "state",
+      "state_reason",
+      "subject",
+      "summary",
+      "updated_at"
+    ]
+  },
+  {
+    "name": "schedule_check_in",
+    "toolset": "threads",
+    "scopes": [
+      "threads:write"
+    ],
+    "annotations": {
+      "title": "Check in with the contact on a date they asked for",
+      "readOnlyHint": false,
+      "idempotentHint": false,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "date",
+      "threadId"
+    ],
+    "required": [
+      "threadId",
+      "date"
+    ],
+    "output": [
+      "achieved_goal_id",
+      "ai_paused",
+      "ai_replies_sent",
+      "assigned_user_id",
+      "campaign",
+      "classification",
+      "closed_at",
+      "closed_reason",
+      "completed_at",
+      "contact",
+      "created_at",
+      "first_sent_at",
+      "follow_up",
+      "id",
+      "last_inbound_at",
+      "last_message_at",
+      "last_outbound_at",
+      "mailbox_id",
+      "manual_floor_rank",
+      "manually_paused",
+      "next_action",
+      "open",
+      "open_escalations",
+      "received_at",
+      "responded_at",
+      "stage",
+      "stage_label",
+      "stage_rank",
+      "state",
+      "state_reason",
+      "subject",
+      "summary",
+      "updated_at"
+    ]
+  },
+  {
+    "name": "cancel_check_in",
+    "toolset": "threads",
+    "scopes": [
+      "threads:write"
+    ],
+    "annotations": {
+      "title": "Cancel a check-in",
+      "readOnlyHint": false,
+      "idempotentHint": false,
+      "destructiveHint": true,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "threadId"
+    ],
+    "required": [
+      "threadId"
+    ],
+    "output": [
+      "achieved_goal_id",
+      "ai_paused",
+      "ai_replies_sent",
+      "assigned_user_id",
+      "campaign",
+      "classification",
+      "closed_at",
+      "closed_reason",
+      "completed_at",
+      "contact",
+      "created_at",
+      "first_sent_at",
+      "follow_up",
+      "id",
+      "last_inbound_at",
+      "last_message_at",
+      "last_outbound_at",
+      "mailbox_id",
+      "manual_floor_rank",
+      "manually_paused",
+      "next_action",
+      "open",
+      "open_escalations",
+      "received_at",
+      "responded_at",
+      "stage",
+      "stage_label",
+      "stage_rank",
+      "state",
+      "state_reason",
+      "subject",
+      "summary",
+      "updated_at"
+    ]
+  },
+  {
+    "name": "reschedule_next_action",
+    "toolset": "threads",
+    "scopes": [
+      "threads:write"
+    ],
+    "annotations": {
+      "title": "Postpone the next email on a thread",
+      "readOnlyHint": false,
+      "idempotentHint": true,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "at",
+      "threadId"
+    ],
+    "required": [
+      "threadId",
+      "at"
+    ],
+    "output": [
+      "achieved_goal_id",
+      "ai_paused",
+      "ai_replies_sent",
+      "assigned_user_id",
+      "campaign",
+      "classification",
+      "closed_at",
+      "closed_reason",
+      "completed_at",
+      "contact",
+      "created_at",
+      "first_sent_at",
+      "follow_up",
+      "id",
+      "last_inbound_at",
+      "last_message_at",
+      "last_outbound_at",
+      "mailbox_id",
+      "manual_floor_rank",
+      "manually_paused",
+      "next_action",
+      "open",
+      "open_escalations",
+      "received_at",
+      "responded_at",
+      "stage",
+      "stage_label",
+      "stage_rank",
+      "state",
+      "state_reason",
+      "subject",
+      "summary",
+      "updated_at"
+    ]
+  },
+  {
+    "name": "send_next_action_now",
+    "toolset": "threads",
+    "scopes": [
+      "messages:send"
+    ],
+    "annotations": {
+      "title": "Send the thread’s next email now",
+      "readOnlyHint": false,
+      "idempotentHint": false,
+      "destructiveHint": false,
+      "openWorldHint": true
+    },
+    "inputs": [
+      "idempotency_key",
+      "threadId"
+    ],
+    "required": [
+      "threadId"
+    ],
+    "output": [
+      "achieved_goal_id",
+      "ai_paused",
+      "ai_replies_sent",
+      "assigned_user_id",
+      "campaign",
+      "classification",
+      "closed_at",
+      "closed_reason",
+      "completed_at",
+      "contact",
+      "created_at",
+      "first_sent_at",
+      "follow_up",
+      "id",
+      "last_inbound_at",
+      "last_message_at",
+      "last_outbound_at",
+      "mailbox_id",
+      "manual_floor_rank",
+      "manually_paused",
+      "next_action",
+      "open",
+      "open_escalations",
+      "received_at",
+      "responded_at",
+      "stage",
+      "stage_label",
+      "stage_rank",
+      "state",
+      "state_reason",
+      "subject",
+      "summary",
+      "updated_at"
+    ]
+  },
+  {
+    "name": "create_reply",
+    "toolset": "threads",
+    "scopes": [
+      "threads:write"
+    ],
+    "annotations": {
+      "title": "Write a reply in a thread (draft, send now, or schedule)",
+      "readOnlyHint": false,
+      "idempotentHint": false,
+      "destructiveHint": false,
+      "openWorldHint": true
+    },
+    "inputs": [
+      "body_text",
+      "idempotency_key",
+      "mode",
+      "send_at",
+      "threadId"
+    ],
+    "required": [
+      "threadId",
+      "body_text",
+      "mode"
+    ],
+    "output": [
+      "approved_at",
+      "author",
+      "body_text",
+      "created_at",
+      "direction",
+      "error",
+      "from_email",
+      "from_name",
+      "has_attachments",
+      "human_open",
+      "id",
+      "inbound_kind",
+      "lint",
+      "match_method",
+      "open_count",
+      "received_at",
+      "scheduled_for",
+      "sent_at",
+      "snippet",
+      "status",
+      "step_id",
+      "stripped_text",
+      "subject",
+      "thread_id",
+      "to_emails",
+      "updated_at",
+      "variant_id"
+    ]
+  },
+  {
+    "name": "generate_ai_draft",
+    "toolset": "threads",
+    "scopes": [
+      "threads:write"
+    ],
+    "annotations": {
+      "title": "Have the agent draft a reply",
+      "readOnlyHint": false,
+      "idempotentHint": false,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "guidance",
+      "threadId"
+    ],
+    "required": [
+      "threadId"
+    ],
+    "output": [
+      "approved_at",
+      "author",
+      "body_text",
+      "created_at",
+      "direction",
+      "error",
+      "from_email",
+      "from_name",
+      "has_attachments",
+      "human_open",
+      "id",
+      "inbound_kind",
+      "lint",
+      "match_method",
+      "open_count",
+      "received_at",
+      "scheduled_for",
+      "sent_at",
+      "snippet",
+      "status",
+      "step_id",
+      "stripped_text",
+      "subject",
+      "thread_id",
+      "to_emails",
+      "updated_at",
+      "variant_id"
+    ]
+  },
+  {
+    "name": "get_message",
+    "toolset": "threads",
+    "scopes": [
+      "threads:read"
+    ],
+    "annotations": {
+      "title": "Get one email",
+      "readOnlyHint": true,
+      "idempotentHint": false,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "messageId"
+    ],
+    "required": [
+      "messageId"
+    ],
+    "output": [
+      "approved_at",
+      "author",
+      "body_text",
+      "created_at",
+      "direction",
+      "error",
+      "from_email",
+      "from_name",
+      "has_attachments",
+      "human_open",
+      "id",
+      "inbound_kind",
+      "lint",
+      "match_method",
+      "open_count",
+      "received_at",
+      "scheduled_for",
+      "sent_at",
+      "snippet",
+      "status",
+      "step_id",
+      "stripped_text",
+      "subject",
+      "thread_id",
+      "to_emails",
+      "updated_at",
+      "variant_id"
+    ]
+  },
+  {
+    "name": "list_pending_drafts",
+    "toolset": "threads",
+    "scopes": [
+      "threads:read"
+    ],
+    "annotations": {
+      "title": "List drafts and emails waiting for approval",
+      "readOnlyHint": true,
+      "idempotentHint": false,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "campaign_id",
+      "cursor",
+      "limit",
+      "status",
+      "thread_id"
+    ],
+    "required": [],
+    "output": [
+      "data",
+      "next_cursor"
+    ]
+  },
+  {
+    "name": "update_draft",
+    "toolset": "threads",
+    "scopes": [
+      "threads:write"
+    ],
+    "annotations": {
+      "title": "Edit a draft, or an email waiting to send",
+      "readOnlyHint": false,
+      "idempotentHint": true,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "body_text",
+      "if_match",
+      "messageId",
+      "subject"
+    ],
+    "required": [
+      "messageId"
+    ],
+    "output": [
+      "approved_at",
+      "author",
+      "body_text",
+      "created_at",
+      "direction",
+      "error",
+      "from_email",
+      "from_name",
+      "has_attachments",
+      "human_open",
+      "id",
+      "inbound_kind",
+      "lint",
+      "match_method",
+      "open_count",
+      "received_at",
+      "scheduled_for",
+      "sent_at",
+      "snippet",
+      "status",
+      "step_id",
+      "stripped_text",
+      "subject",
+      "thread_id",
+      "to_emails",
+      "updated_at",
+      "variant_id"
+    ]
+  },
+  {
+    "name": "approve_draft",
+    "toolset": "threads",
+    "scopes": [
+      "messages:send"
+    ],
+    "annotations": {
+      "title": "Approve a draft to send",
+      "readOnlyHint": false,
+      "idempotentHint": false,
+      "destructiveHint": false,
+      "openWorldHint": true
+    },
+    "inputs": [
+      "idempotency_key",
+      "messageId",
+      "send_at"
+    ],
+    "required": [
+      "messageId"
+    ],
+    "output": [
+      "approved_at",
+      "author",
+      "body_text",
+      "created_at",
+      "direction",
+      "error",
+      "from_email",
+      "from_name",
+      "has_attachments",
+      "human_open",
+      "id",
+      "inbound_kind",
+      "lint",
+      "match_method",
+      "open_count",
+      "received_at",
+      "scheduled_for",
+      "sent_at",
+      "snippet",
+      "status",
+      "step_id",
+      "stripped_text",
+      "subject",
+      "thread_id",
+      "to_emails",
+      "updated_at",
+      "variant_id"
+    ]
+  },
+  {
+    "name": "reject_draft",
+    "toolset": "threads",
+    "scopes": [
+      "threads:write"
+    ],
+    "annotations": {
+      "title": "Reject a draft",
+      "readOnlyHint": false,
+      "idempotentHint": false,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "feedback",
+      "messageId",
+      "reason"
+    ],
+    "required": [
+      "messageId",
+      "reason"
+    ],
+    "output": [
+      "approved_at",
+      "author",
+      "body_text",
+      "created_at",
+      "direction",
+      "error",
+      "from_email",
+      "from_name",
+      "has_attachments",
+      "human_open",
+      "id",
+      "inbound_kind",
+      "lint",
+      "match_method",
+      "open_count",
+      "received_at",
+      "scheduled_for",
+      "sent_at",
+      "snippet",
+      "status",
+      "step_id",
+      "stripped_text",
+      "subject",
+      "thread_id",
+      "to_emails",
+      "updated_at",
+      "variant_id"
+    ]
+  },
+  {
+    "name": "cancel_scheduled_message",
+    "toolset": "threads",
+    "scopes": [
+      "threads:write"
+    ],
+    "annotations": {
+      "title": "Cancel an email before it sends",
+      "readOnlyHint": false,
+      "idempotentHint": false,
+      "destructiveHint": true,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "messageId"
+    ],
+    "required": [
+      "messageId"
+    ],
+    "output": [
+      "approved_at",
+      "author",
+      "body_text",
+      "created_at",
+      "direction",
+      "error",
+      "from_email",
+      "from_name",
+      "has_attachments",
+      "human_open",
+      "id",
+      "inbound_kind",
+      "lint",
+      "match_method",
+      "open_count",
+      "received_at",
+      "scheduled_for",
+      "sent_at",
+      "snippet",
+      "status",
+      "step_id",
+      "stripped_text",
+      "subject",
+      "thread_id",
+      "to_emails",
+      "updated_at",
+      "variant_id"
+    ]
+  },
+  {
+    "name": "lint_message",
+    "toolset": "threads",
+    "scopes": [
+      "threads:read"
+    ],
+    "annotations": {
+      "title": "Check an email against the content linter",
+      "readOnlyHint": false,
+      "idempotentHint": false,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "body_text",
+      "compliance_required",
+      "first_touch",
+      "subject"
+    ],
+    "required": [
+      "subject",
+      "body_text"
+    ],
+    "output": [
+      "findings",
+      "sendable"
+    ]
+  },
+  {
+    "name": "list_unmatched_messages",
+    "toolset": "threads",
+    "scopes": [
+      "threads:read"
+    ],
+    "annotations": {
+      "title": "List mail from known contacts that matched no thread",
+      "readOnlyHint": true,
+      "idempotentHint": false,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "cursor",
+      "limit",
+      "mailbox_id"
+    ],
+    "required": [],
+    "output": [
+      "data",
+      "next_cursor"
+    ]
+  },
+  {
+    "name": "attach_message_to_thread",
+    "toolset": "threads",
+    "scopes": [
+      "threads:write"
+    ],
+    "annotations": {
+      "title": "Attach an unmatched email to a thread",
+      "readOnlyHint": false,
+      "idempotentHint": false,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "messageId",
+      "thread_id"
+    ],
+    "required": [
+      "messageId",
+      "thread_id"
+    ],
+    "output": [
+      "approved_at",
+      "author",
+      "body_text",
+      "created_at",
+      "direction",
+      "error",
+      "from_email",
+      "from_name",
+      "has_attachments",
+      "human_open",
+      "id",
+      "inbound_kind",
+      "lint",
+      "match_method",
+      "open_count",
+      "received_at",
+      "scheduled_for",
+      "sent_at",
+      "snippet",
+      "status",
+      "step_id",
+      "stripped_text",
+      "subject",
+      "thread_id",
+      "to_emails",
+      "updated_at",
+      "variant_id"
+    ]
+  },
+  {
+    "name": "ignore_unmatched_message",
+    "toolset": "threads",
+    "scopes": [
+      "threads:write"
+    ],
+    "annotations": {
+      "title": "Ignore an unmatched email",
+      "readOnlyHint": false,
+      "idempotentHint": false,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "messageId"
+    ],
+    "required": [
+      "messageId"
+    ],
+    "output": [
+      "approved_at",
+      "author",
+      "body_text",
+      "created_at",
+      "direction",
+      "error",
+      "from_email",
+      "from_name",
+      "has_attachments",
+      "human_open",
+      "id",
+      "inbound_kind",
+      "lint",
+      "match_method",
+      "open_count",
+      "received_at",
+      "scheduled_for",
+      "sent_at",
+      "snippet",
+      "status",
+      "step_id",
+      "stripped_text",
+      "subject",
+      "thread_id",
+      "to_emails",
+      "updated_at",
+      "variant_id"
+    ]
+  },
+  {
+    "name": "list_activities",
+    "toolset": "threads",
+    "scopes": [
+      "threads:read"
+    ],
+    "annotations": {
+      "title": "List activity across the workspace",
+      "readOnlyHint": true,
+      "idempotentHint": false,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "campaign_id",
+      "contact_id",
+      "cursor",
+      "limit",
+      "thread_id",
+      "type"
+    ],
+    "required": [],
+    "output": [
+      "data",
+      "next_cursor"
+    ]
+  },
+  {
+    "name": "list_escalations",
+    "toolset": "escalations",
+    "scopes": [
+      "escalations:read"
+    ],
+    "annotations": {
+      "title": "List escalations (\"Needs you\")",
+      "readOnlyHint": true,
+      "idempotentHint": false,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "assigned_user_id",
+      "campaign_id",
+      "cursor",
+      "limit",
+      "overdue",
+      "priority",
+      "reason",
+      "status",
+      "thread_id"
+    ],
+    "required": [],
+    "output": [
+      "data",
+      "next_cursor"
+    ]
+  },
+  {
+    "name": "get_escalation",
+    "toolset": "escalations",
+    "scopes": [
+      "escalations:read"
+    ],
+    "annotations": {
+      "title": "Get one escalation",
+      "readOnlyHint": true,
+      "idempotentHint": false,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "escalationId"
+    ],
+    "required": [
+      "escalationId"
+    ],
+    "output": [
+      "assigned_user_id",
+      "campaign_id",
+      "contact_id",
+      "created_at",
+      "due_at",
+      "explanation",
+      "goal_id",
+      "goal_p",
+      "id",
+      "overdue",
+      "priority",
+      "questions",
+      "reason",
+      "reasons",
+      "resolution",
+      "resolution_note",
+      "resolved_at",
+      "resolved_by",
+      "snoozed_until",
+      "status",
+      "suggested_draft_id",
+      "thread_id",
+      "title",
+      "trigger_message_id",
+      "updated_at"
+    ]
+  },
+  {
+    "name": "resolve_escalation",
+    "toolset": "escalations",
+    "scopes": [
+      "escalations:write"
+    ],
+    "annotations": {
+      "title": "Mark an escalation resolved",
+      "readOnlyHint": false,
+      "idempotentHint": false,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "escalationId",
+      "note",
+      "resolution"
+    ],
+    "required": [
+      "escalationId",
+      "resolution"
+    ],
+    "output": [
+      "assigned_user_id",
+      "campaign_id",
+      "contact_id",
+      "created_at",
+      "due_at",
+      "explanation",
+      "goal_id",
+      "goal_p",
+      "id",
+      "overdue",
+      "priority",
+      "questions",
+      "reason",
+      "reasons",
+      "resolution",
+      "resolution_note",
+      "resolved_at",
+      "resolved_by",
+      "snoozed_until",
+      "status",
+      "suggested_draft_id",
+      "thread_id",
+      "title",
+      "trigger_message_id",
+      "updated_at"
+    ]
+  },
+  {
+    "name": "snooze_escalation",
+    "toolset": "escalations",
+    "scopes": [
+      "escalations:write"
+    ],
+    "annotations": {
+      "title": "Snooze an escalation",
+      "readOnlyHint": false,
+      "idempotentHint": false,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "escalationId",
+      "note",
+      "until"
+    ],
+    "required": [
+      "escalationId",
+      "until"
+    ],
+    "output": [
+      "assigned_user_id",
+      "campaign_id",
+      "contact_id",
+      "created_at",
+      "due_at",
+      "explanation",
+      "goal_id",
+      "goal_p",
+      "id",
+      "overdue",
+      "priority",
+      "questions",
+      "reason",
+      "reasons",
+      "resolution",
+      "resolution_note",
+      "resolved_at",
+      "resolved_by",
+      "snoozed_until",
+      "status",
+      "suggested_draft_id",
+      "thread_id",
+      "title",
+      "trigger_message_id",
+      "updated_at"
+    ]
+  },
+  {
+    "name": "assign_escalation",
+    "toolset": "escalations",
+    "scopes": [
+      "escalations:write"
+    ],
+    "annotations": {
+      "title": "Assign an escalation to a person",
+      "readOnlyHint": false,
+      "idempotentHint": false,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "escalationId",
+      "user_id"
+    ],
+    "required": [
+      "escalationId",
+      "user_id"
+    ],
+    "output": [
+      "assigned_user_id",
+      "campaign_id",
+      "contact_id",
+      "created_at",
+      "due_at",
+      "explanation",
+      "goal_id",
+      "goal_p",
+      "id",
+      "overdue",
+      "priority",
+      "questions",
+      "reason",
+      "reasons",
+      "resolution",
+      "resolution_note",
+      "resolved_at",
+      "resolved_by",
+      "snoozed_until",
+      "status",
+      "suggested_draft_id",
+      "thread_id",
+      "title",
+      "trigger_message_id",
+      "updated_at"
+    ]
+  },
+  {
+    "name": "dismiss_escalation",
+    "toolset": "escalations",
+    "scopes": [
+      "escalations:write"
+    ],
+    "annotations": {
+      "title": "Dismiss an escalation",
+      "readOnlyHint": false,
+      "idempotentHint": false,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "escalationId",
+      "reason"
+    ],
+    "required": [
+      "escalationId",
+      "reason"
+    ],
+    "output": [
+      "assigned_user_id",
+      "campaign_id",
+      "contact_id",
+      "created_at",
+      "due_at",
+      "explanation",
+      "goal_id",
+      "goal_p",
+      "id",
+      "overdue",
+      "priority",
+      "questions",
+      "reason",
+      "reasons",
+      "resolution",
+      "resolution_note",
+      "resolved_at",
+      "resolved_by",
+      "snoozed_until",
+      "status",
+      "suggested_draft_id",
+      "thread_id",
+      "title",
+      "trigger_message_id",
+      "updated_at"
+    ]
+  },
+  {
+    "name": "answer_escalation",
+    "toolset": "escalations",
+    "scopes": [
+      "escalations:write"
+    ],
+    "annotations": {
+      "title": "Answer for the agent, and get a new draft",
+      "readOnlyHint": false,
+      "idempotentHint": false,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "answer",
+      "escalationId",
+      "knowledge_scope",
+      "save_to_knowledge"
+    ],
+    "required": [
+      "escalationId",
+      "answer"
+    ],
+    "output": [
+      "draft",
+      "escalation",
+      "knowledge_item_id"
+    ]
+  },
+  {
+    "name": "list_mailboxes",
+    "toolset": "deliverability",
+    "scopes": [
+      "mailboxes:read"
+    ],
+    "annotations": {
+      "title": "List mailboxes",
+      "readOnlyHint": true,
+      "idempotentHint": false,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "cursor",
+      "domain_id",
+      "limit",
+      "status"
+    ],
+    "required": [],
+    "output": [
+      "data",
+      "next_cursor"
+    ]
+  },
+  {
+    "name": "create_mailbox",
+    "toolset": "deliverability",
+    "scopes": [
+      "mailboxes:write"
+    ],
+    "annotations": {
+      "title": "Connect a mailbox with a password or app password",
+      "readOnlyHint": false,
+      "idempotentHint": false,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "daily_limit",
+      "display_name",
+      "email",
+      "hourly_limit",
+      "idempotency_key",
+      "imap_host",
+      "imap_port",
+      "imap_username",
+      "max_interval_sec",
+      "min_interval_sec",
+      "owner_user_id",
+      "password",
+      "provider",
+      "signature_text",
+      "smtp_host",
+      "smtp_port",
+      "smtp_secure",
+      "smtp_username",
+      "warmup_daily_increment",
+      "warmup_enabled",
+      "warmup_start_volume"
+    ],
+    "required": [
+      "email",
+      "provider",
+      "password",
+      "display_name"
+    ],
+    "output": [
+      "auth",
+      "catalyst_dkim",
+      "created_at",
+      "daily_limit",
+      "display_name",
+      "email",
+      "folders",
+      "health_band",
+      "health_score",
+      "hourly_limit",
+      "id",
+      "imap_host",
+      "imap_port",
+      "imap_username",
+      "last_poll_at",
+      "last_poll_status",
+      "last_sent_at",
+      "max_interval_sec",
+      "min_interval_sec",
+      "next_poll_at",
+      "owner_user_id",
+      "provider",
+      "sending_domain_id",
+      "signature_text",
+      "smtp_host",
+      "smtp_port",
+      "smtp_secure",
+      "smtp_username",
+      "status",
+      "status_reason",
+      "today_cap",
+      "updated_at",
+      "warmup_daily_increment",
+      "warmup_enabled",
+      "warmup_start_volume",
+      "warmup_step"
+    ]
+  },
+  {
+    "name": "get_mailbox",
+    "toolset": "deliverability",
+    "scopes": [
+      "mailboxes:read"
+    ],
+    "annotations": {
+      "title": "Get one mailbox",
+      "readOnlyHint": true,
+      "idempotentHint": false,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "mailboxId"
+    ],
+    "required": [
+      "mailboxId"
+    ],
+    "output": [
+      "auth",
+      "catalyst_dkim",
+      "created_at",
+      "daily_limit",
+      "display_name",
+      "email",
+      "folders",
+      "health_band",
+      "health_score",
+      "hourly_limit",
+      "id",
+      "imap_host",
+      "imap_port",
+      "imap_username",
+      "last_poll_at",
+      "last_poll_status",
+      "last_sent_at",
+      "max_interval_sec",
+      "min_interval_sec",
+      "next_poll_at",
+      "owner_user_id",
+      "provider",
+      "sending_domain_id",
+      "signature_text",
+      "smtp_host",
+      "smtp_port",
+      "smtp_secure",
+      "smtp_username",
+      "status",
+      "status_reason",
+      "today_cap",
+      "updated_at",
+      "warmup_daily_increment",
+      "warmup_enabled",
+      "warmup_start_volume",
+      "warmup_step"
+    ]
+  },
+  {
+    "name": "update_mailbox",
+    "toolset": "deliverability",
+    "scopes": [
+      "mailboxes:write"
+    ],
+    "annotations": {
+      "title": "Change a mailbox’s limits, warm-up, signature or password",
+      "readOnlyHint": false,
+      "idempotentHint": true,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "daily_limit",
+      "display_name",
+      "hourly_limit",
+      "if_match",
+      "mailboxId",
+      "max_interval_sec",
+      "min_interval_sec",
+      "owner_user_id",
+      "password",
+      "signature_text",
+      "warmup_daily_increment",
+      "warmup_enabled",
+      "warmup_start_volume"
+    ],
+    "required": [
+      "mailboxId"
+    ],
+    "output": [
+      "auth",
+      "catalyst_dkim",
+      "created_at",
+      "daily_limit",
+      "display_name",
+      "email",
+      "folders",
+      "health_band",
+      "health_score",
+      "hourly_limit",
+      "id",
+      "imap_host",
+      "imap_port",
+      "imap_username",
+      "last_poll_at",
+      "last_poll_status",
+      "last_sent_at",
+      "max_interval_sec",
+      "min_interval_sec",
+      "next_poll_at",
+      "owner_user_id",
+      "provider",
+      "sending_domain_id",
+      "signature_text",
+      "smtp_host",
+      "smtp_port",
+      "smtp_secure",
+      "smtp_username",
+      "status",
+      "status_reason",
+      "today_cap",
+      "updated_at",
+      "warmup_daily_increment",
+      "warmup_enabled",
+      "warmup_start_volume",
+      "warmup_step"
+    ]
+  },
+  {
+    "name": "delete_mailbox",
+    "toolset": "deliverability",
+    "scopes": [
+      "mailboxes:write"
+    ],
+    "annotations": {
+      "title": "Remove a mailbox that never sent",
+      "readOnlyHint": false,
+      "idempotentHint": false,
+      "destructiveHint": true,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "mailboxId"
+    ],
+    "required": [
+      "mailboxId"
+    ],
+    "output": null
+  },
+  {
+    "name": "pause_mailbox",
+    "toolset": "deliverability",
+    "scopes": [
+      "mailboxes:write"
+    ],
+    "annotations": {
+      "title": "Pause sending from a mailbox",
+      "readOnlyHint": false,
+      "idempotentHint": false,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "mailboxId",
+      "reason"
+    ],
+    "required": [
+      "mailboxId"
+    ],
+    "output": [
+      "auth",
+      "catalyst_dkim",
+      "created_at",
+      "daily_limit",
+      "display_name",
+      "email",
+      "folders",
+      "health_band",
+      "health_score",
+      "hourly_limit",
+      "id",
+      "imap_host",
+      "imap_port",
+      "imap_username",
+      "last_poll_at",
+      "last_poll_status",
+      "last_sent_at",
+      "max_interval_sec",
+      "min_interval_sec",
+      "next_poll_at",
+      "owner_user_id",
+      "provider",
+      "sending_domain_id",
+      "signature_text",
+      "smtp_host",
+      "smtp_port",
+      "smtp_secure",
+      "smtp_username",
+      "status",
+      "status_reason",
+      "today_cap",
+      "updated_at",
+      "warmup_daily_increment",
+      "warmup_enabled",
+      "warmup_start_volume",
+      "warmup_step"
+    ]
+  },
+  {
+    "name": "resume_mailbox",
+    "toolset": "deliverability",
+    "scopes": [
+      "mailboxes:write"
+    ],
+    "annotations": {
+      "title": "Resume sending from a paused mailbox",
+      "readOnlyHint": false,
+      "idempotentHint": false,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "acknowledge_cause",
+      "mailboxId"
+    ],
+    "required": [
+      "mailboxId"
+    ],
+    "output": [
+      "auth",
+      "catalyst_dkim",
+      "created_at",
+      "daily_limit",
+      "display_name",
+      "email",
+      "folders",
+      "health_band",
+      "health_score",
+      "hourly_limit",
+      "id",
+      "imap_host",
+      "imap_port",
+      "imap_username",
+      "last_poll_at",
+      "last_poll_status",
+      "last_sent_at",
+      "max_interval_sec",
+      "min_interval_sec",
+      "next_poll_at",
+      "owner_user_id",
+      "provider",
+      "sending_domain_id",
+      "signature_text",
+      "smtp_host",
+      "smtp_port",
+      "smtp_secure",
+      "smtp_username",
+      "status",
+      "status_reason",
+      "today_cap",
+      "updated_at",
+      "warmup_daily_increment",
+      "warmup_enabled",
+      "warmup_start_volume",
+      "warmup_step"
+    ]
+  },
+  {
+    "name": "create_mailbox_dkim_key",
+    "toolset": "deliverability",
+    "scopes": [
+      "mailboxes:write"
+    ],
+    "annotations": {
+      "title": "Have Catalyst sign a mailbox’s mail with its own DKIM key",
+      "readOnlyHint": false,
+      "idempotentHint": false,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "mailboxId",
+      "selector"
+    ],
+    "required": [
+      "mailboxId"
+    ],
+    "output": [
+      "auth",
+      "catalyst_dkim",
+      "created_at",
+      "daily_limit",
+      "display_name",
+      "email",
+      "folders",
+      "health_band",
+      "health_score",
+      "hourly_limit",
+      "id",
+      "imap_host",
+      "imap_port",
+      "imap_username",
+      "last_poll_at",
+      "last_poll_status",
+      "last_sent_at",
+      "max_interval_sec",
+      "min_interval_sec",
+      "next_poll_at",
+      "owner_user_id",
+      "provider",
+      "sending_domain_id",
+      "signature_text",
+      "smtp_host",
+      "smtp_port",
+      "smtp_secure",
+      "smtp_username",
+      "status",
+      "status_reason",
+      "today_cap",
+      "updated_at",
+      "warmup_daily_increment",
+      "warmup_enabled",
+      "warmup_start_volume",
+      "warmup_step"
+    ]
+  },
+  {
+    "name": "delete_mailbox_dkim_key",
+    "toolset": "deliverability",
+    "scopes": [
+      "mailboxes:write"
+    ],
+    "annotations": {
+      "title": "Stop signing a mailbox’s mail with Catalyst’s DKIM key",
+      "readOnlyHint": false,
+      "idempotentHint": false,
+      "destructiveHint": true,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "mailboxId"
+    ],
+    "required": [
+      "mailboxId"
+    ],
+    "output": [
+      "auth",
+      "catalyst_dkim",
+      "created_at",
+      "daily_limit",
+      "display_name",
+      "email",
+      "folders",
+      "health_band",
+      "health_score",
+      "hourly_limit",
+      "id",
+      "imap_host",
+      "imap_port",
+      "imap_username",
+      "last_poll_at",
+      "last_poll_status",
+      "last_sent_at",
+      "max_interval_sec",
+      "min_interval_sec",
+      "next_poll_at",
+      "owner_user_id",
+      "provider",
+      "sending_domain_id",
+      "signature_text",
+      "smtp_host",
+      "smtp_port",
+      "smtp_secure",
+      "smtp_username",
+      "status",
+      "status_reason",
+      "today_cap",
+      "updated_at",
+      "warmup_daily_increment",
+      "warmup_enabled",
+      "warmup_start_volume",
+      "warmup_step"
+    ]
+  },
+  {
+    "name": "test_mailbox_connection",
+    "toolset": "deliverability",
+    "scopes": [
+      "mailboxes:write"
+    ],
+    "annotations": {
+      "title": "Run the mailbox connection test",
+      "readOnlyHint": false,
+      "idempotentHint": false,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "mailboxId"
+    ],
+    "required": [
+      "mailboxId"
+    ],
+    "output": [
+      "mailbox",
+      "passed",
+      "steps"
+    ]
+  },
+  {
+    "name": "poll_mailbox_now",
+    "toolset": "deliverability",
+    "scopes": [
+      "mailboxes:read"
+    ],
+    "annotations": {
+      "title": "Check a mailbox for new mail now",
+      "readOnlyHint": false,
+      "idempotentHint": false,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "mailboxId"
+    ],
+    "required": [
+      "mailboxId"
+    ],
+    "output": [
+      "last_poll_at",
+      "mailbox_id",
+      "queued_at"
+    ]
+  },
+  {
+    "name": "get_deliverability_overview",
+    "toolset": "deliverability",
+    "scopes": [
+      "mailboxes:read"
+    ],
+    "annotations": {
+      "title": "Every domain and mailbox at a glance",
+      "readOnlyHint": true,
+      "idempotentHint": false,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "inputs": [],
+    "required": [],
+    "output": [
+      "domains",
+      "events",
+      "mailboxes",
+      "today"
+    ]
+  },
+  {
+    "name": "get_sending_capacity",
+    "toolset": "deliverability",
+    "scopes": [
+      "mailboxes:read"
+    ],
+    "annotations": {
+      "title": "Today’s sending plan and the 7-day forecast",
+      "readOnlyHint": true,
+      "idempotentHint": false,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "campaign_id",
+      "domain_id",
+      "mailbox_id"
+    ],
+    "required": [],
+    "output": [
+      "campaigns",
+      "day",
+      "domains",
+      "forecast",
+      "mailboxes"
+    ]
+  },
+  {
+    "name": "list_poll_runs",
+    "toolset": "deliverability",
+    "scopes": [
+      "mailboxes:read"
+    ],
+    "annotations": {
+      "title": "List a mailbox’s recent polls",
+      "readOnlyHint": true,
+      "idempotentHint": false,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "cursor",
+      "limit",
+      "mailboxId"
+    ],
+    "required": [
+      "mailboxId"
+    ],
+    "output": [
+      "data",
+      "next_cursor"
+    ]
+  },
+  {
+    "name": "get_mailbox_stats",
+    "toolset": "deliverability",
+    "scopes": [
+      "mailboxes:read"
+    ],
+    "annotations": {
+      "title": "Get a mailbox’s daily sending, bounce and reply counts",
+      "readOnlyHint": true,
+      "idempotentHint": false,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "days",
+      "mailboxId"
+    ],
+    "required": [
+      "mailboxId"
+    ],
+    "output": [
+      "days",
+      "health_inputs",
+      "mailbox_id",
+      "totals"
+    ]
+  },
+  {
+    "name": "list_domains",
+    "toolset": "deliverability",
+    "scopes": [
+      "mailboxes:read"
+    ],
+    "annotations": {
+      "title": "List sending domains",
+      "readOnlyHint": true,
+      "idempotentHint": false,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "cursor",
+      "limit"
+    ],
+    "required": [],
+    "output": [
+      "data",
+      "next_cursor"
+    ]
+  },
+  {
+    "name": "create_domain",
+    "toolset": "deliverability",
+    "scopes": [
+      "mailboxes:write"
+    ],
+    "annotations": {
+      "title": "Add a sending domain",
+      "readOnlyHint": false,
+      "idempotentHint": false,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "dkim_selectors",
+      "domain",
+      "idempotency_key",
+      "ramp_plan",
+      "tracking_host"
+    ],
+    "required": [
+      "domain"
+    ],
+    "output": [
+      "alignment_status",
+      "blocklisted",
+      "checks",
+      "created_at",
+      "dkim_selectors",
+      "domain",
+      "first_touches_paused",
+      "id",
+      "last_checked_at",
+      "mailbox_count",
+      "postmaster",
+      "ramp",
+      "reputation_band",
+      "reputation_score",
+      "tracking_host"
+    ]
+  },
+  {
+    "name": "get_domain",
+    "toolset": "deliverability",
+    "scopes": [
+      "mailboxes:read"
+    ],
+    "annotations": {
+      "title": "Get one sending domain",
+      "readOnlyHint": true,
+      "idempotentHint": false,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "domainId"
+    ],
+    "required": [
+      "domainId"
+    ],
+    "output": [
+      "alignment_status",
+      "blocklisted",
+      "checks",
+      "created_at",
+      "dkim_selectors",
+      "domain",
+      "first_touches_paused",
+      "id",
+      "last_checked_at",
+      "mailbox_count",
+      "postmaster",
+      "ramp",
+      "reputation_band",
+      "reputation_score",
+      "tracking_host"
+    ]
+  },
+  {
+    "name": "delete_domain",
+    "toolset": "deliverability",
+    "scopes": [
+      "mailboxes:write"
+    ],
+    "annotations": {
+      "title": "Remove a sending domain",
+      "readOnlyHint": false,
+      "idempotentHint": false,
+      "destructiveHint": true,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "domainId"
+    ],
+    "required": [
+      "domainId"
+    ],
+    "output": null
+  },
+  {
+    "name": "check_domain_dns",
+    "toolset": "deliverability",
+    "scopes": [
+      "mailboxes:write"
+    ],
+    "annotations": {
+      "title": "Check a domain’s SPF, DKIM, DMARC, MX and tracking records now",
+      "readOnlyHint": false,
+      "idempotentHint": false,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "domainId"
+    ],
+    "required": [
+      "domainId"
+    ],
+    "output": [
+      "alignment_status",
+      "blocklisted",
+      "checks",
+      "created_at",
+      "dkim_selectors",
+      "domain",
+      "first_touches_paused",
+      "id",
+      "last_checked_at",
+      "mailbox_count",
+      "postmaster",
+      "ramp",
+      "reputation_band",
+      "reputation_score",
+      "tracking_host"
+    ]
+  },
+  {
+    "name": "resume_domain_first_touches",
+    "toolset": "deliverability",
+    "scopes": [
+      "mailboxes:write"
+    ],
+    "annotations": {
+      "title": "Let first emails go again after an authentication failure",
+      "readOnlyHint": false,
+      "idempotentHint": false,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "acknowledge_cause",
+      "domainId"
+    ],
+    "required": [
+      "domainId"
+    ],
+    "output": [
+      "alignment_status",
+      "blocklisted",
+      "checks",
+      "created_at",
+      "dkim_selectors",
+      "domain",
+      "first_touches_paused",
+      "id",
+      "last_checked_at",
+      "mailbox_count",
+      "postmaster",
+      "ramp",
+      "reputation_band",
+      "reputation_score",
+      "tracking_host"
+    ]
+  },
+  {
+    "name": "get_domain_reputation",
+    "toolset": "deliverability",
+    "scopes": [
+      "mailboxes:read"
+    ],
+    "annotations": {
+      "title": "Get a domain’s reputation score, what it costs and its history",
+      "readOnlyHint": true,
+      "idempotentHint": false,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "domainId"
+    ],
+    "required": [
+      "domainId"
+    ],
+    "output": [
+      "band",
+      "band_changed_at",
+      "domain_id",
+      "history",
+      "inputs",
+      "score"
+    ]
+  },
+  {
+    "name": "get_domain_ramp",
+    "toolset": "deliverability",
+    "scopes": [
+      "mailboxes:read"
+    ],
+    "annotations": {
+      "title": "Get a domain’s ramp plan, schedule and planned vs sent history",
+      "readOnlyHint": true,
+      "idempotentHint": false,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "domainId"
+    ],
+    "required": [
+      "domainId"
+    ],
+    "output": [
+      "cap_override",
+      "custom_schedule",
+      "domain_id",
+      "final_step",
+      "history",
+      "mailbox_cap_total",
+      "manual_hold",
+      "plan",
+      "schedule",
+      "status",
+      "status_reason",
+      "step",
+      "today_cap",
+      "tomorrow_cap"
+    ]
+  },
+  {
+    "name": "update_domain_ramp",
+    "toolset": "deliverability",
+    "scopes": [
+      "settings:manage"
+    ],
+    "annotations": {
+      "title": "Change a domain’s ramp plan",
+      "readOnlyHint": false,
+      "idempotentHint": true,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "custom_schedule",
+      "domainId",
+      "plan",
+      "reason"
+    ],
+    "required": [
+      "domainId",
+      "plan",
+      "reason"
+    ],
+    "output": [
+      "cap_override",
+      "custom_schedule",
+      "domain_id",
+      "final_step",
+      "history",
+      "mailbox_cap_total",
+      "manual_hold",
+      "plan",
+      "schedule",
+      "status",
+      "status_reason",
+      "step",
+      "today_cap",
+      "tomorrow_cap"
+    ]
+  },
+  {
+    "name": "hold_domain_ramp",
+    "toolset": "deliverability",
+    "scopes": [
+      "settings:manage"
+    ],
+    "annotations": {
+      "title": "Hold a domain’s ramp at its current step",
+      "readOnlyHint": false,
+      "idempotentHint": false,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "domainId",
+      "reason"
+    ],
+    "required": [
+      "domainId",
+      "reason"
+    ],
+    "output": [
+      "cap_override",
+      "custom_schedule",
+      "domain_id",
+      "final_step",
+      "history",
+      "mailbox_cap_total",
+      "manual_hold",
+      "plan",
+      "schedule",
+      "status",
+      "status_reason",
+      "step",
+      "today_cap",
+      "tomorrow_cap"
+    ]
+  },
+  {
+    "name": "resume_domain_ramp",
+    "toolset": "deliverability",
+    "scopes": [
+      "settings:manage"
+    ],
+    "annotations": {
+      "title": "Let a held ramp move up again",
+      "readOnlyHint": false,
+      "idempotentHint": false,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "domainId",
+      "reason"
+    ],
+    "required": [
+      "domainId",
+      "reason"
+    ],
+    "output": [
+      "cap_override",
+      "custom_schedule",
+      "domain_id",
+      "final_step",
+      "history",
+      "mailbox_cap_total",
+      "manual_hold",
+      "plan",
+      "schedule",
+      "status",
+      "status_reason",
+      "step",
+      "today_cap",
+      "tomorrow_cap"
+    ]
+  },
+  {
+    "name": "step_back_domain_ramp",
+    "toolset": "deliverability",
+    "scopes": [
+      "settings:manage"
+    ],
+    "annotations": {
+      "title": "Drop a domain’s ramp back by hand",
+      "readOnlyHint": false,
+      "idempotentHint": false,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "domainId",
+      "reason",
+      "steps"
+    ],
+    "required": [
+      "domainId",
+      "reason"
+    ],
+    "output": [
+      "cap_override",
+      "custom_schedule",
+      "domain_id",
+      "final_step",
+      "history",
+      "mailbox_cap_total",
+      "manual_hold",
+      "plan",
+      "schedule",
+      "status",
+      "status_reason",
+      "step",
+      "today_cap",
+      "tomorrow_cap"
+    ]
+  },
+  {
+    "name": "set_domain_cap_override",
+    "toolset": "deliverability",
+    "scopes": [
+      "settings:manage"
+    ],
+    "annotations": {
+      "title": "Set a temporary daily cap for a domain",
+      "readOnlyHint": false,
+      "idempotentHint": true,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "cap",
+      "domainId",
+      "reason",
+      "until"
+    ],
+    "required": [
+      "domainId",
+      "cap",
+      "until",
+      "reason"
+    ],
+    "output": [
+      "cap_override",
+      "custom_schedule",
+      "domain_id",
+      "final_step",
+      "history",
+      "mailbox_cap_total",
+      "manual_hold",
+      "plan",
+      "schedule",
+      "status",
+      "status_reason",
+      "step",
+      "today_cap",
+      "tomorrow_cap"
+    ]
+  },
+  {
+    "name": "clear_domain_cap_override",
+    "toolset": "deliverability",
+    "scopes": [
+      "settings:manage"
+    ],
+    "annotations": {
+      "title": "Remove a domain’s temporary cap",
+      "readOnlyHint": false,
+      "idempotentHint": false,
+      "destructiveHint": true,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "domainId"
+    ],
+    "required": [
+      "domainId"
+    ],
+    "output": null
+  },
+  {
+    "name": "list_webhook_endpoints",
+    "toolset": "admin",
+    "scopes": [
+      "webhooks:manage"
+    ],
+    "annotations": {
+      "title": "List webhook endpoints",
+      "readOnlyHint": true,
+      "idempotentHint": false,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "cursor",
+      "limit"
+    ],
+    "required": [],
+    "output": [
+      "data",
+      "next_cursor"
+    ]
+  },
+  {
+    "name": "create_webhook_endpoint",
+    "toolset": "admin",
+    "scopes": [
+      "webhooks:manage"
+    ],
+    "annotations": {
+      "title": "Add a webhook endpoint",
+      "readOnlyHint": false,
+      "idempotentHint": false,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "description",
+      "events",
+      "idempotency_key",
+      "url"
+    ],
+    "required": [
+      "url",
+      "events"
+    ],
+    "output": [
+      "active",
+      "consecutive_failures",
+      "created_at",
+      "description",
+      "disabled_at",
+      "events",
+      "id",
+      "secret",
+      "url"
+    ]
+  },
+  {
+    "name": "update_webhook_endpoint",
+    "toolset": "admin",
+    "scopes": [
+      "webhooks:manage"
+    ],
+    "annotations": {
+      "title": "Change a webhook endpoint",
+      "readOnlyHint": false,
+      "idempotentHint": true,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "active",
+      "description",
+      "endpointId",
+      "events",
+      "url"
+    ],
+    "required": [
+      "endpointId"
+    ],
+    "output": [
+      "active",
+      "consecutive_failures",
+      "created_at",
+      "description",
+      "disabled_at",
+      "events",
+      "id",
+      "url"
+    ]
+  },
+  {
+    "name": "delete_webhook_endpoint",
+    "toolset": "admin",
+    "scopes": [
+      "webhooks:manage"
+    ],
+    "annotations": {
+      "title": "Delete a webhook endpoint",
+      "readOnlyHint": false,
+      "idempotentHint": false,
+      "destructiveHint": true,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "endpointId"
+    ],
+    "required": [
+      "endpointId"
+    ],
+    "output": null
+  },
+  {
+    "name": "test_webhook_endpoint",
+    "toolset": "admin",
+    "scopes": [
+      "webhooks:manage"
+    ],
+    "annotations": {
+      "title": "Send a test event to a webhook endpoint",
+      "readOnlyHint": false,
+      "idempotentHint": false,
+      "destructiveHint": false,
+      "openWorldHint": true
+    },
+    "inputs": [
+      "endpointId"
+    ],
+    "required": [
+      "endpointId"
+    ],
+    "output": [
+      "attempt",
+      "created_at",
+      "delivered_at",
+      "endpoint_id",
+      "event_id",
+      "event_type",
+      "id",
+      "next_attempt_at",
+      "response_snippet",
+      "response_status",
+      "status"
+    ]
+  },
+  {
+    "name": "list_webhook_deliveries",
+    "toolset": "admin",
+    "scopes": [
+      "webhooks:manage"
+    ],
+    "annotations": {
+      "title": "List an endpoint’s deliveries",
+      "readOnlyHint": true,
+      "idempotentHint": false,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "cursor",
+      "endpointId",
+      "limit",
+      "status"
+    ],
+    "required": [
+      "endpointId"
+    ],
+    "output": [
+      "data",
+      "next_cursor"
+    ]
+  },
+  {
+    "name": "redeliver_webhook",
+    "toolset": "admin",
+    "scopes": [
+      "webhooks:manage"
+    ],
+    "annotations": {
+      "title": "Send a delivery again",
+      "readOnlyHint": false,
+      "idempotentHint": false,
+      "destructiveHint": false,
+      "openWorldHint": true
+    },
+    "inputs": [
+      "deliveryId"
+    ],
+    "required": [
+      "deliveryId"
+    ],
+    "output": [
+      "attempt",
+      "created_at",
+      "delivered_at",
+      "endpoint_id",
+      "event_id",
+      "event_type",
+      "id",
+      "next_attempt_at",
+      "response_snippet",
+      "response_status",
+      "status"
+    ]
+  },
+  {
+    "name": "list_integrations",
+    "toolset": "admin",
+    "scopes": [
+      "settings:manage"
+    ],
+    "annotations": {
+      "title": "List integrations",
+      "readOnlyHint": true,
+      "idempotentHint": false,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "inputs": [],
+    "required": [],
+    "output": [
+      "data"
+    ]
+  },
+  {
+    "name": "create_integration",
+    "toolset": "admin",
+    "scopes": [
+      "settings:manage"
+    ],
+    "annotations": {
+      "title": "Connect an integration",
+      "readOnlyHint": false,
+      "idempotentHint": false,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "idempotency_key",
+      "kind",
+      "signing_secret"
+    ],
+    "required": [
+      "kind"
+    ],
+    "output": [
+      "active",
+      "id",
+      "kind",
+      "secret",
+      "webhook_path"
+    ]
+  },
+  {
+    "name": "delete_integration",
+    "toolset": "admin",
+    "scopes": [
+      "settings:manage"
+    ],
+    "annotations": {
+      "title": "Disconnect an integration",
+      "readOnlyHint": false,
+      "idempotentHint": false,
+      "destructiveHint": true,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "integrationId"
+    ],
+    "required": [
+      "integrationId"
+    ],
+    "output": null
+  },
+  {
+    "name": "list_integration_events",
+    "toolset": "admin",
+    "scopes": [
+      "settings:manage"
+    ],
+    "annotations": {
+      "title": "List received integration events",
+      "readOnlyHint": true,
+      "idempotentHint": false,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "cursor",
+      "limit",
+      "outcome"
+    ],
+    "required": [],
+    "output": [
+      "data",
+      "next_cursor"
+    ]
+  },
+  {
+    "name": "attach_integration_event",
+    "toolset": "admin",
+    "scopes": [
+      "settings:manage",
+      "threads:write"
+    ],
+    "annotations": {
+      "title": "Achieve a goal from an unmatched integration event",
+      "readOnlyHint": false,
+      "idempotentHint": false,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "eventId",
+      "goal_id",
+      "thread_id"
+    ],
+    "required": [
+      "eventId",
+      "thread_id",
+      "goal_id"
+    ],
+    "output": [
+      "contact_email",
+      "external_id",
+      "goal_key",
+      "id",
+      "integration_id",
+      "matched_contact_id",
+      "matched_thread_id",
+      "outcome",
+      "processed_at",
+      "received_at",
+      "source",
+      "type",
+      "value_cents"
+    ]
+  },
+  {
+    "name": "get_dashboard_overview",
+    "toolset": "analytics",
+    "scopes": [
+      "analytics:read"
+    ],
+    "annotations": {
+      "title": "The Dashboard: what needs you, sends, replies, goals and deliverability",
+      "readOnlyHint": true,
+      "idempotentHint": false,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "days"
+    ],
+    "required": [],
+    "output": [
+      "campaigns",
+      "days",
+      "deliverability",
+      "goals",
+      "needs_you",
+      "recent_activity",
+      "reply_rate",
+      "sent_today"
+    ]
+  },
+  {
+    "name": "get_funnel",
+    "toolset": "analytics",
+    "scopes": [
+      "analytics:read"
+    ],
+    "annotations": {
+      "title": "The funnel: sent, received, responded, then each goal",
+      "readOnlyHint": true,
+      "idempotentHint": false,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "campaign_id",
+      "days"
+    ],
+    "required": [],
+    "output": [
+      "campaign_id",
+      "since",
+      "stages"
+    ]
+  },
+  {
+    "name": "get_campaign_stats",
+    "toolset": "analytics",
+    "scopes": [
+      "analytics:read"
+    ],
+    "annotations": {
+      "title": "A campaign’s funnel, emails, steps, variants and goals",
+      "readOnlyHint": true,
+      "idempotentHint": false,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "campaignId",
+      "days"
+    ],
+    "required": [
+      "campaignId"
+    ],
+    "output": [
+      "campaign_id",
+      "emails",
+      "funnel",
+      "goals",
+      "since",
+      "steps",
+      "threads",
+      "value_cents"
+    ]
+  },
+  {
+    "name": "list_knowledge_gaps",
+    "toolset": "analytics",
+    "scopes": [
+      "analytics:read"
+    ],
+    "annotations": {
+      "title": "The questions the knowledge base couldn’t answer, most asked first",
+      "readOnlyHint": true,
+      "idempotentHint": false,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "campaign_id",
+      "days",
+      "limit"
+    ],
+    "required": [],
+    "output": [
+      "data"
+    ]
+  },
+  {
+    "name": "list_knowledge_items",
+    "toolset": "knowledge",
+    "scopes": [
+      "knowledge:read"
+    ],
+    "annotations": {
+      "title": "List knowledge items",
+      "readOnlyHint": true,
+      "idempotentHint": false,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "active",
+      "cursor",
+      "kind",
+      "limit",
+      "q",
+      "scope",
+      "source"
+    ],
+    "required": [],
+    "output": [
+      "data",
+      "next_cursor"
+    ]
+  },
+  {
+    "name": "create_knowledge_item",
+    "toolset": "knowledge",
+    "scopes": [
+      "knowledge:write"
+    ],
+    "annotations": {
+      "title": "Add a knowledge item",
+      "readOnlyHint": false,
+      "idempotentHint": false,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "active",
+      "campaign_id",
+      "content",
+      "idempotency_key",
+      "kind",
+      "tags",
+      "title",
+      "visibility"
+    ],
+    "required": [
+      "kind",
+      "title",
+      "content"
+    ],
+    "output": [
+      "active",
+      "campaign_id",
+      "content",
+      "created_at",
+      "id",
+      "kind",
+      "source",
+      "source_escalation_id",
+      "tags",
+      "title",
+      "updated_at",
+      "visibility"
+    ]
+  },
+  {
+    "name": "get_knowledge_item",
+    "toolset": "knowledge",
+    "scopes": [
+      "knowledge:read"
+    ],
+    "annotations": {
+      "title": "Get one knowledge item",
+      "readOnlyHint": true,
+      "idempotentHint": false,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "itemId"
+    ],
+    "required": [
+      "itemId"
+    ],
+    "output": [
+      "active",
+      "campaign_id",
+      "content",
+      "created_at",
+      "id",
+      "kind",
+      "source",
+      "source_escalation_id",
+      "tags",
+      "title",
+      "updated_at",
+      "visibility"
+    ]
+  },
+  {
+    "name": "update_knowledge_item",
+    "toolset": "knowledge",
+    "scopes": [
+      "knowledge:write"
+    ],
+    "annotations": {
+      "title": "Change a knowledge item",
+      "readOnlyHint": false,
+      "idempotentHint": true,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "active",
+      "campaign_id",
+      "content",
+      "if_match",
+      "itemId",
+      "kind",
+      "tags",
+      "title",
+      "visibility"
+    ],
+    "required": [
+      "itemId"
+    ],
+    "output": [
+      "active",
+      "campaign_id",
+      "content",
+      "created_at",
+      "id",
+      "kind",
+      "source",
+      "source_escalation_id",
+      "tags",
+      "title",
+      "updated_at",
+      "visibility"
+    ]
+  },
+  {
+    "name": "delete_knowledge_item",
+    "toolset": "knowledge",
+    "scopes": [
+      "knowledge:write"
+    ],
+    "annotations": {
+      "title": "Delete a knowledge item",
+      "readOnlyHint": false,
+      "idempotentHint": false,
+      "destructiveHint": true,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "itemId"
+    ],
+    "required": [
+      "itemId"
+    ],
+    "output": null
+  },
+  {
+    "name": "test_knowledge",
+    "toolset": "knowledge",
+    "scopes": [
+      "knowledge:read"
+    ],
+    "annotations": {
+      "title": "Ask the agent a prospect’s question",
+      "readOnlyHint": false,
+      "idempotentHint": false,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "campaign_id",
+      "question"
+    ],
+    "required": [
+      "question"
+    ],
+    "output": [
+      "answer",
+      "answerable",
+      "citations"
+    ]
+  },
+  {
+    "name": "get_workspace_settings",
+    "toolset": "admin",
+    "scopes": [
+      "settings:manage"
+    ],
+    "annotations": {
+      "title": "Get the workspace settings",
+      "readOnlyHint": true,
+      "idempotentHint": false,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "inputs": [],
+    "required": [],
+    "output": [
+      "ai",
+      "business_hours",
+      "default_timezone",
+      "id",
+      "name",
+      "notifications",
+      "physical_address",
+      "security",
+      "updated_at"
+    ]
+  },
+  {
+    "name": "update_workspace_settings",
+    "toolset": "admin",
+    "scopes": [
+      "settings:manage"
+    ],
+    "annotations": {
+      "title": "Change the workspace settings",
+      "readOnlyHint": false,
+      "idempotentHint": true,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "ai",
+      "business_hours",
+      "default_timezone",
+      "if_match",
+      "name",
+      "notifications",
+      "physical_address",
+      "security"
+    ],
+    "required": [],
+    "output": [
+      "ai",
+      "business_hours",
+      "default_timezone",
+      "id",
+      "name",
+      "notifications",
+      "physical_address",
+      "security",
+      "updated_at"
+    ]
+  },
+  {
+    "name": "list_users",
+    "toolset": "admin",
+    "scopes": [
+      "settings:manage"
+    ],
+    "annotations": {
+      "title": "List the team",
+      "readOnlyHint": true,
+      "idempotentHint": false,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "cursor",
+      "include_removed",
+      "limit"
+    ],
+    "required": [],
+    "output": [
+      "data",
+      "next_cursor"
+    ]
+  },
+  {
+    "name": "invite_user",
+    "toolset": "admin",
+    "scopes": [
+      "settings:manage"
+    ],
+    "annotations": {
+      "title": "Add someone to the team",
+      "readOnlyHint": false,
+      "idempotentHint": false,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "email",
+      "idempotency_key",
+      "name",
+      "role"
+    ],
+    "required": [
+      "email",
+      "name",
+      "role"
+    ],
+    "output": [
+      "created_at",
+      "deactivated_at",
+      "email",
+      "id",
+      "last_login_at",
+      "name",
+      "notifications",
+      "role",
+      "timezone"
+    ]
+  },
+  {
+    "name": "update_user",
+    "toolset": "admin",
+    "scopes": [
+      "settings:manage"
+    ],
+    "annotations": {
+      "title": "Change someone’s role or preferences",
+      "readOnlyHint": false,
+      "idempotentHint": true,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "name",
+      "notifications",
+      "role",
+      "timezone",
+      "userId"
+    ],
+    "required": [
+      "userId"
+    ],
+    "output": [
+      "created_at",
+      "deactivated_at",
+      "email",
+      "id",
+      "last_login_at",
+      "name",
+      "notifications",
+      "role",
+      "timezone"
+    ]
+  },
+  {
+    "name": "remove_user",
+    "toolset": "admin",
+    "scopes": [
+      "settings:manage"
+    ],
+    "annotations": {
+      "title": "Remove someone from the team",
+      "readOnlyHint": false,
+      "idempotentHint": false,
+      "destructiveHint": true,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "userId"
+    ],
+    "required": [
+      "userId"
+    ],
+    "output": null
+  },
+  {
+    "name": "get_ai_usage",
+    "toolset": "admin",
+    "scopes": [
+      "settings:manage"
+    ],
+    "annotations": {
+      "title": "What the AI agent cost, and how its runs went",
+      "readOnlyHint": true,
+      "idempotentHint": false,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "inputs": [
+      "days"
+    ],
+    "required": [],
+    "output": [
+      "budget",
+      "by_day",
+      "by_model",
+      "by_task",
+      "classification_fallback_rate",
+      "disagreement_rate",
+      "since",
+      "total"
+    ]
+  }
+]

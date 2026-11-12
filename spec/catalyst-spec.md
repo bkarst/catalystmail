@@ -3,8 +3,8 @@
 | | |
 |---|---|
 | **Version** | 0.1 (draft for review) |
-| **Date** | 2026-11-10 |
-| **Status** | Specification only. Nothing in this document is implemented yet. |
+| **Date** | 2026-11-11 |
+| **Status** | Specification, with implementation under way. §20.1 records what is built and where the code differs. |
 | **Scope** | Web app (Next.js), background worker, data model, email transport, AI agent, public API (OpenAPI 3.1) + MCP bridge, testing & verification |
 
 The key words **MUST**, **MUST NOT**, **SHOULD**, **SHOULD NOT** and **MAY** follow RFC 2119.
@@ -229,12 +229,16 @@ catalyst/
 |---|---|---|---|
 | `scheduler.tick` | cron every 1 min | singleton | Finds due next-actions; composes and enqueues sends (§7.2) |
 | `mail.poll` | cron `*/30 * * * *`, one per mailbox, ±0–120 s jitter | singleton per mailbox | Incremental IMAP sync (§7.3). Timeout 10 min. |
-| `mail.poll.now` | UI button / API `pollMailboxNow` | joins the same singleton | Returns 409 if a poll is already running |
+| `mail.poll.now` | UI button / API `pollMailboxNow` | joins the same singleton | Returns 409 if a poll is already running. Queued as `mail.poll` with trigger `manual` or `api`. |
+| `mail.poll.all` | cron `*/30 * * * *` | singleton | Queues one `mail.poll` per active or paused mailbox, each 0–120 s later |
 | `inbound.process` | per new message | per thread serialized | Parse, match, classify, persist, then `thread.evaluate` |
 | `thread.evaluate` | after any message, tracking or goal event | singleton per thread, debounced 2 s | Recomputes stage, state and next action (§5.6) |
 | `outbound.compose` | scheduler | per thread | Renders template, runs AI personalization, lints |
 | `outbound.send` | scheduled time | per mailbox concurrency 1, spaced | Pre-send guard, then SMTP submit (§7.2) |
 | `delivery.confirm` | sent_at + grace | per message | Promotes the thread to *Received* if there's no bounce |
+| `outbound.sweep` | cron every 5 min | singleton | Marks sends stuck in `sending` for 10 min as `send_unknown` and queues `outbound.reconcile` (§7.2 step 7) |
+| `outbound.reconcile` | `outbound.sweep` | per message | Searches Sent for the Message-ID: found → `sent`; not found → one retry through the pre-send guard; can't tell → escalation |
+| `outbound.append_sent` | after a send, when `append_to_sent` | per message | IMAP APPEND of the exact raw message to Sent with `\Seen`, unless Sent already has it (§7.2 step 8) |
 | `ai.classify_conversation` | after each inbound message or person-written outbound message; on demand | per thread serialized; global concurrency 16 | Jev call (§10.4). Runs before every other AI task on the message. |
 | `ai.analyze_inbound` / `ai.draft_reply` / `ai.draft_follow_up` / `ai.personalize` / `ai.summarize` | pipeline | global concurrency limit (default 4) | Every call logged in `ai_runs` |
 | `deliverability.dns_check` | daily + on demand | per domain | SPF/DKIM/DMARC/MX/CNAME |
@@ -323,12 +327,19 @@ Rules:
 | `paused` | Paused by a person, or the AI was paused because a human took over | Held | No |
 | `completed` | Final goal achieved | Stopped (optional closing reply) | Yes |
 | `exhausted` | A follow-up sequence finished with no reply (finish rule `exhaust`, §5.10) | Stopped | Yes, but reopens on a reply |
-| `closed_lost` | Not interested, wrong person, or closed by a person | Stopped | Yes, but a reply raises an escalation |
+| `closed_lost` | Not interested, wrong person, or closed by a person | Stopped | Yes, but a reply reopens it as `needs_human` (below) |
 | `bounced` | Hard bounce on the contact's address | Stopped | Yes |
 | `unsubscribed` | Contact opted out or complained (global) | Stopped, and MUST NOT send | Yes |
 | `stopped` | Campaign archived, contact deleted, or stopped by hand | Stopped | Yes |
 
 State is derived in this priority order: `stopped` > `unsubscribed` > `bounced` > `completed` > `closed_lost` > `paused` > `needs_human` > `pending_approval` > `exhausted` > `active`.
+
+**Reopening a closed thread.** `closed_lost` holds only until the contact writes again. Every close (by the agent, a finish rule, a person or the API) sets `threads.closed_at`. The thread counts as `closed_lost` only while no `human_reply` from the contact has been stored since then.
+
+- A human reply after the close ends the `closed_lost` condition and raises a `reopened` escalation (§11.1), so the derived state is `needs_human`. Nothing is sent until a person decides: reply, dismiss the escalation so the agent carries on, or close the thread again, which sets a new `closed_at`.
+- The comparison uses when the reply was stored (`messages.created_at`), not the mail's own date. A reply that was already in the mailbox when the thread was closed still reopens it at the next poll.
+- Out-of-office and other auto-replies don't reopen the thread. An unsubscribe request or a complaint moves it to `unsubscribed` as usual.
+- `closed_at` and `closed_reason` stay on the row as the record of the last close.
 
 ### 5.5 Next action
 
@@ -357,6 +368,13 @@ deriveThread(input: {
 ```
 
 The worker compares the result with the stored row. If anything differs, it writes the new values (optimistic lock on `threads.version`) and appends one `activities` row per changed field (`thread.stage_changed`, `thread.state_changed`, …). It then emits webhooks and SSE events. Evaluation is idempotent: running it twice gives the same row and no duplicate activities.
+
+Besides messages and events, evaluation reads a few stored facts that can't be derived:
+
+- **Set by a person or the worker, on the thread:** `manual_floor_rank`, `manually_paused`, `stopped_at`, `ai_paused`, `closed_at`, `follow_ups_stopped`, `follow_ups_not_before`, `check_in_at`, `check_in_set_at` and `finish_applied_at`.
+- **A scheduler postponement:** the stored `next_action_at` together with `throttle_reason`. Evaluation keeps it while the same send is still pending.
+- **Skipped follow-up steps:** `follow_up.skipped` activities. A skipped step counts as taken, so the sequence moves on.
+- **Delivery:** `received_at` is latched. Once delivery is proven it stays proven, which is why a late bounce can't lower the stage (§5.3).
 
 ### 5.7 Outbound message lifecycle
 
@@ -464,7 +482,7 @@ The conversation is **waiting on the contact** when our message was the last one
 
 ### 6.1 Conventions
 
-- **IDs** are prefixed, sortable text IDs in the TypeID format (`<prefix>_<UUIDv7 in base32>`, generated with `typeid-js`), such as `ctc_01jd…`. Prefixes help both people and LLMs see which entity they're holding. Prefixes: `wsp, usr, key, co, ctc, tag, lst, cfd, sup, dom, mbx, cmp, gol, stp, var, thr, msg, att, trk, lnk, esc, kbi, air, act, whk, whd, ine, imp, prn`.
+- **IDs** are prefixed, sortable text IDs in the TypeID format (`<prefix>_<UUIDv7 in base32>`, generated with `typeid-js`), such as `ctc_01jd…`. Prefixes help both people and LLMs see which entity they're holding. Prefixes: `wsp, usr, key, co, ctc, tag, lst, cfd, sup, dom, mbx, cmp, gol, seq, stp, var, thr, msg, att, trk, lnk, esc, kbi, air, act, whk, whd, int, ine, imp, prn, evt, ntf, psb`.
 - Every timestamp is `timestamptz`, stored in UTC and rendered in the viewer's timezone.
 - Every business table carries `workspace_id` and `created_at`/`updated_at`. Soft delete (`deleted_at`) applies to contacts, companies, campaigns and knowledge.
 - Email addresses use `citext` and are trimmed and lower-cased on write. Local parts are not normalized further (no Gmail dot-stripping).
@@ -529,9 +547,29 @@ create table users (
   workspace_id text not null references workspaces,
   email citext not null unique, name text not null, role user_role not null default 'member',
   timezone text, notification_prefs jsonb not null default '{}',
-  last_login_at timestamptz, created_at timestamptz not null default now(), updated_at timestamptz not null default now()
+  last_login_at timestamptz, created_at timestamptz not null default now(), updated_at timestamptz not null default now(),
+  deactivated_at timestamptz                        -- removed from the team; kept because history points at them
 );
--- Auth sessions/accounts/2FA tables are owned by the auth library.
+-- Auth sessions/accounts/2FA tables are owned by the auth library: Better Auth's core schema, named
+-- auth_* with snake_case columns. An auth user is linked to the `users` row with the same email.
+create table auth_users (id text primary key, name text not null, email text not null unique,
+  email_verified boolean not null default false, image text,
+  two_factor_enabled boolean not null default false,  -- TOTP set up and confirmed
+  created_at timestamptz not null, updated_at timestamptz not null);
+create table auth_sessions (id text primary key, user_id text not null references auth_users on delete cascade,
+  token text not null unique, expires_at timestamptz not null, ip_address text, user_agent text,
+  created_at timestamptz not null, updated_at timestamptz not null);
+create table auth_accounts (id text primary key, user_id text not null references auth_users on delete cascade,
+  account_id text not null, provider_id text not null, access_token text, refresh_token text, id_token text,
+  access_token_expires_at timestamptz, refresh_token_expires_at timestamptz, scope text,
+  password text,                                    -- the library's salted hash
+  created_at timestamptz not null, updated_at timestamptz not null);
+create table auth_verifications (id text primary key, identifier text not null, value text not null,
+  expires_at timestamptz not null, created_at timestamptz not null, updated_at timestamptz not null);
+create table auth_two_factors (id text primary key, user_id text not null references auth_users on delete cascade,
+  secret text not null, backup_codes text not null,  -- encrypted by the library
+  verified boolean default true, failed_verification_count int default 0, locked_until timestamptz);
+create table auth_rate_limits (id text primary key, key text not null unique, count int not null, last_request bigint not null);  -- login throttling (§16)
 
 create table api_keys (
   id text primary key,                              -- key_
@@ -623,10 +661,15 @@ create unique index suppressions_domain_uq on suppressions (workspace_id, domain
 
 create table imports (
   id text primary key, workspace_id text not null references workspaces,   -- imp_
-  filename text not null, storage_key text not null, mapping jsonb, dedupe_strategy text not null default 'skip',
+  filename text not null, storage_key text not null,
+  headers text[] not null default '{}',             -- the file's column headers, in order
+  mapping jsonb,                                    -- {"Email":"email","Company":"company","Industry":"custom.industry","Notes":null}
+  options jsonb not null default '{}',              -- consent basis and owner given to new contacts (§12.3)
+  dedupe_strategy text not null default 'skip',
   target_list_id text references lists, tag_ids text[] not null default '{}',
   status text not null default 'uploaded',          -- uploaded | mapped | processing | done | failed
-  total_rows int, created_count int default 0, updated_count int default 0, skipped_count int default 0,
+  total_rows int, processed_rows int not null default 0,
+  created_count int default 0, updated_count int default 0, skipped_count int default 0,
   error_count int default 0, errors jsonb not null default '[]',
   created_by text references users, created_at timestamptz not null default now(), finished_at timestamptz
 );
@@ -640,14 +683,17 @@ create table sending_domains (
   domain citext not null, tracking_host citext,     -- e.g. 'go.getacme.com' (CNAME → Catalyst)
   spf_status text, dkim_status text, dkim_selectors text[] not null default '{}',
   dmarc_status text, dmarc_policy text, mx_status text, tracking_status text,
-  alignment_status text,                             -- from Authentication-Results of the self-test
+  alignment_status text,                             -- aligned | not_aligned | unknown, from Authentication-Results of the self-test
   blocklisted boolean not null default false, blocklist_details jsonb not null default '[]',
+  first_touches_paused_at timestamptz,              -- SPF, DKIM or DMARC started failing: no first touches until a person resumes them (§8.9)
+  first_touches_paused_reason text,                 -- which records failed, e.g. 'dkim, dmarc'
   reputation_score smallint not null default 100,
   reputation_band text not null default 'healthy',  -- healthy | at_risk | critical | paused (§8.10)
   reputation_inputs jsonb not null default '{}',    -- latest score components and the points each cost
   band_changed_at timestamptz,
   postmaster_connected boolean not null default false,
   postmaster_data jsonb,                            -- latest Gmail spam rate, auth rates, compliance status
+  postmaster_credentials_enc bytea, postmaster_credentials_key_version int,  -- the Google refresh token, sealed (§16)
   ramp_plan text not null default 'new_domain' check (ramp_plan in ('new_domain','aged_domain','established','custom')),
   ramp_custom_schedule jsonb,                       -- [{"step":0,"cap":20},…] when ramp_plan = 'custom'
   ramp_step smallint not null default 0,
@@ -672,7 +718,7 @@ create table mailboxes (
   credentials_enc bytea not null, credentials_key_version int not null,  -- password or OAuth refresh token
   folders jsonb not null,                           -- {"inbox":"INBOX","sent":"[Gmail]/Sent Mail","junk":"[Gmail]/Spam"}
   append_to_sent boolean not null default false,    -- true when the provider doesn't save SMTP submissions
-  catalyst_dkim jsonb,                              -- optional {selector, private_key_enc} for generic SMTP hosts
+  catalyst_dkim jsonb,                              -- optional {selector, private_key_enc, public_key} for generic SMTP hosts
   status mailbox_status not null default 'pending', status_reason text,
   daily_limit int not null default 40 check (daily_limit between 1 and 500),
   hourly_limit int not null default 12,
@@ -725,7 +771,7 @@ create table capacity_plans (                       -- today's allocation plus t
   bucket text not null,                             -- a campaign id, or 'reply_reserve' / 'follow_ups'
   kind text not null check (kind in ('allocation','forecast')),
   allocated int not null, used int not null default 0,
-  limited_by text,                                  -- domain_ramp | domain_reputation | mailbox_cap | mailbox_health | campaign_share | campaign_limit
+  limited_by text,                                  -- domain_ramp | domain_reputation | domain_auth | mailbox_cap | mailbox_health | campaign_share | campaign_limit
   computed_at timestamptz not null default now(),
   primary key (day, mailbox_id, bucket, kind)
 );
@@ -819,7 +865,7 @@ create table campaign_steps (                       -- the initial email (sequen
   ai_guidance text,                                 -- brief for ai_adapt / ai_write
   include_tracking boolean,                         -- null = inherit from campaign
   unique nulls not distinct (campaign_id, sequence_id, position),
-  check (position between 1 and 6),
+  check (position >= 1),                            -- 1..6 is enforced on save; reordering passes through higher values
   check (sequence_id is not null or (position = 1 and wait_amount = 0 and mode <> 'ai_adapt'))
 );
 
@@ -851,10 +897,17 @@ create table threads (
   follow_up_sequence_id text references follow_up_sequences,  -- sequence for the current stage, if any
   follow_up_step_position smallint,                 -- next step to send in that sequence
   follow_ups_stopped boolean not null default false,  -- a person stopped follow-ups for this thread
+  follow_ups_not_before timestamptz,                -- earliest time for the next follow-up: set when a hold ends or follow-ups resume (§5.10)
+  check_in_at timestamptz,                          -- a check-in the contact asked for, replacing the sequence until it is written (§5.10 rule 5)
+  check_in_set_at timestamptz,                      -- when it was set: a human reply after this cancels it
+  finish_applied_at timestamptz,                    -- when the current wait's finish rule was carried out, so it isn't repeated (§5.10)
   follow_ups_sent smallint not null default 0,      -- lifetime count (the 30-day cap is computed from messages)
   ai_replies_sent smallint not null default 0,
   ai_paused boolean not null default false,         -- human took over
+  manually_paused boolean not null default false,   -- paused by a person (§5.4)
+  stopped_at timestamptz,                           -- stopped by hand (§5.4)
   closed_reason text,                               -- not_interested | wrong_person | manual | …
+  closed_at timestamptz,                            -- last close; a human reply stored after it reopens the thread (§5.4)
   subject text,                                     -- normalized root subject
   root_message_id_header text,
   open_status open_status not null default 'unopened',
@@ -896,6 +949,7 @@ create table thread_participants (                  -- extra people who joined (
 create table messages (
   id text primary key, workspace_id text not null references workspaces,   -- msg_
   thread_id text references threads,                -- null = unmatched inbound
+  ignored_at timestamptz,                           -- unmatched inbound a person chose to ignore (ignoreUnmatchedMessage)
   mailbox_id text not null references mailboxes,
   direction message_direction not null, status message_status not null, author message_author not null,
   step_id text references campaign_steps, variant_id text references campaign_step_variants,
@@ -914,6 +968,7 @@ create table messages (
   smtp_response text, smtp_attempts smallint not null default 0, error text,
   imap_folder text, imap_uid bigint,
   inbound_kind inbound_kind, auto_reply_until date, dsn_status text, -- e.g. '5.1.1'
+  needs_reply_p numeric(4,3),                       -- Jev's needs_reply for this inbound message; null until classified (§10.4)
   tracking_token text unique,
   open_count int not null default 0, first_opened_at timestamptz, last_opened_at timestamptz,
   human_open boolean not null default false,
@@ -977,6 +1032,8 @@ create table ai_runs (
   decision text,                                    -- auto_send | queue_approval | escalate | no_action
   error text, created_at timestamptz not null default now()
 );
+create index ai_runs_workspace_idx on ai_runs (workspace_id, created_at);  -- the month's spend (§10.2)
+create index ai_runs_thread_idx on ai_runs (thread_id, created_at);        -- the per-thread daily cap
 
 create table escalations (
   id text primary key, workspace_id text not null references workspaces,   -- esc_
@@ -987,6 +1044,8 @@ create table escalations (
   explanation text not null,                        -- the agent's plain-language explanation
   questions jsonb not null default '[]',            -- [{text, why_unanswerable}]
   suggested_draft_id text references messages,
+  goal_id text references campaign_goals,           -- goal_confirmation: the goal to confirm
+  goal_p numeric(4,3),                              -- and how likely it is reached
   status escalation_status not null default 'open',
   assigned_user_id text references users,
   due_at timestamptz not null, snoozed_until timestamptz,
@@ -1007,10 +1066,13 @@ create table activities (                           -- contact/thread timeline a
   type text not null,                               -- see §22.C
   actor_type actor_type not null, actor_id text,
   data jsonb not null default '{}',                 -- {"from":"sent","to":"responded","reason":"…"}
-  occurred_at timestamptz not null default now()
+  occurred_at timestamptz not null default now(),   -- when it happened (a booking's start time, say)
+  created_at timestamptz not null default now()     -- when it was recorded: the webhook dispatcher's clock (§13.6)
 );
 create index activities_contact_idx on activities (contact_id, occurred_at desc);
 create index activities_thread_idx  on activities (thread_id, occurred_at desc);
+create index activities_created_idx on activities (workspace_id, created_at);
+-- after insert on activities: pg_notify('catalyst_activity', workspace_id || ':' || id), for the SSE stream (§4.2)
 
 create table integrations (
   id text primary key, workspace_id text not null, kind text not null,  -- stripe | calcom | calendly | generic
@@ -1026,6 +1088,30 @@ create table integration_events (
   unique (workspace_id, source, external_id)        -- dedupe
 );
 
+create table notifications (                       -- §11.2: what was sent to whom, and why
+  id text primary key, workspace_id text not null,  -- ntf_
+  user_id text references users,                   -- null for the Slack channel
+  activity_id text,                                 -- the event it is about, or 'digest:YYYY-MM-DD'
+  channel text not null check (channel in ('email','slack','push')),
+  kind text not null,                               -- escalation | breaker | sla_breached | poll_failed | webhook_disabled | ai_budget | digest | invite
+  priority text not null default 'normal',          -- urgent | high | normal
+  title text not null, body text not null, link text,
+  status text not null default 'pending',           -- pending | sent | failed | skipped
+  error text, send_after timestamptz,               -- quiet hours hold high-priority mail until morning
+  sent_at timestamptz, created_at timestamptz not null default now(),
+  unique nulls not distinct (activity_id, user_id, channel)
+);
+create index notifications_pending_idx on notifications (status, send_after) where status = 'pending';
+
+create table push_subscriptions (                  -- §11.2 browser push: browsers a person allowed
+  id text primary key, workspace_id text not null,  -- psb_
+  user_id text not null references users on delete cascade,
+  endpoint text not null unique,                    -- the browser's push service URL
+  p256dh text not null, auth text not null,         -- its keys (RFC 8291)
+  user_agent text, created_at timestamptz not null default now(), last_sent_at timestamptz
+);
+create index push_subscriptions_user_idx on push_subscriptions (user_id);
+
 create table webhook_endpoints (
   id text primary key, workspace_id text not null,  -- whk_
   url text not null, description text, events text[] not null, secret_enc bytea not null,
@@ -1037,7 +1123,8 @@ create table webhook_deliveries (
   event_id text not null, event_type text not null, payload jsonb not null,
   attempt smallint not null default 0, status text not null default 'pending',
   response_status int, response_snippet text, next_attempt_at timestamptz, delivered_at timestamptz,
-  created_at timestamptz not null default now()
+  created_at timestamptz not null default now(),
+  unique (endpoint_id, event_id)                    -- one delivery per event per endpoint
 );
 
 create table idempotency_keys (
@@ -1045,6 +1132,12 @@ create table idempotency_keys (
   request_hash bytea not null, response_status int, response_body jsonb,
   created_at timestamptz not null default now(),    -- purged after 24 h
   primary key (workspace_id, principal_id, key)
+);
+
+create table rate_limit_windows (                   -- §13.3: requests per key per minute, in fixed windows
+  key text not null,                                -- '<principal id>:general' or '<principal id>:send'
+  window_start timestamptz not null, count int not null default 0,
+  primary key (key, window_start)                   -- windows older than an hour are purged
 );
 
 create table audit_log (                            -- security-relevant admin actions
@@ -1260,18 +1353,25 @@ Mailbox warm-up follows the same table, using the mailbox's health band: Healthy
 #### 8.3.3 Capacity formula
 
 ```
-domain_cap(d)        = (override(d) ?? ramp_schedule(d)[ramp_step]) × band_multiplier(d)
-mailbox_cap(m)       = min(m.daily_limit, warmup_start + warmup_increment × m.warmup_step) × band_multiplier(m)
+domain_cap(d)        = floor((override(d) ?? ramp_schedule(d)[ramp_step]) × band_multiplier(d))
+mailbox_cap(m)       = floor(min(m.daily_limit, warmup_start + warmup_increment × m.warmup_step) × band_multiplier(m))
 mailbox_alloc(m)     = min(mailbox_cap(m), domain_cap(d) × mailbox_cap(m) / Σ mailbox_cap(active mailboxes on d))
 reply_reserve(m)     = ceil(0.15 × mailbox_alloc(m))
-first_touch_pool(m)  = mailbox_alloc(m) − reply_reserve(m) − follow-ups due today on m
+first_touch_pool(m)  = max(0, mailbox_alloc(m) − reply_reserve(m) − follow-ups due today on m)
 campaign_alloc(c, m) = first_touch_pool(m) × w(c) / Σ w(active campaigns on m with threads waiting)
                        w = priority weight (high 3, normal 2, low 1) × campaign_mailboxes.weight
                        capped by c.daily_new_threads_limit across all of c's mailboxes
 ```
 
+- **Whole numbers.** Every figure in the plan is a whole number of emails.
+  - **Ramp steps:** a plan's cap at step *n* is its start × (1 + rate)ⁿ, rounded to the nearest whole number. For `new_domain` that gives 20, 23, 26, 30, 35, 40, 46, 53, 61, 70, 81, 93, 107, and so on up to the total of the mailbox caps.
+  - **Band multipliers** round down (the `floor` above).
+  - **The reply reserve and the 10% reply overflow** round up. Percentages use integer arithmetic (`15 × n / 100`), so floating-point error can't tip the result.
+  - **Splits** (the domain cap across mailboxes, and a first-touch pool across campaigns) use the largest-remainder method: round every share down, then give the leftover out one at a time to the shares with the largest fractional parts. Ties go to the larger share, then to the older mailbox or campaign (lower ID). The parts always add up exactly to the amount being split.
+  - **Example:** a domain cap of 20 across three new mailboxes capped at 10 gives allocations of 7, 7 and 6. Their reply reserves are 2, 2 and 1, which leaves a first-touch pool of 5 on each.
 - **Send order on each mailbox:** replies, then follow-ups in Responded and goal stages, then follow-ups in Sent/Received, then initial emails. Existing conversations are never starved by new outreach.
-- **Replies always go out.** They draw on the reserve first, then on any unused allocation. If both run out, replies may exceed the mailbox's allocation by up to 10%, because answering someone who wrote to you is the lowest-risk email there is. Replies stop only when the mailbox itself is paused (§8.9).
+- **Replies always go out.** They draw on the reserve first, then on any unused allocation. If both run out, replies may exceed the mailbox's allocation by up to 10% (rounded up), because answering someone who wrote to you is the lowest-risk email there is. Replies stop only when the mailbox itself is paused (§8.9).
+- **The reserve is for replies only.** Reserve that replies don't use isn't released to follow-ups or first touches, at the midday rebalance or at any other time. On a day with few replies, a mailbox sends less than its allocation. Follow-ups and first touches share what's left after the reserve, follow-ups first.
 - **Midday rebalance:** at 13:00 in the mailbox's timezone, any campaign allocation still unused opens to every campaign on that mailbox.
 - **Mailbox assignment:** a thread gets its mailbox at its first send: the campaign mailbox with the most allocation left, adjusted by `campaign_mailboxes.weight`. After that it stays on that mailbox.
 - The hourly cap, spacing between sends, and per-recipient-domain limits in §8.3.4 apply on top.
@@ -1287,7 +1387,7 @@ campaign_alloc(c, m) = first_touch_pool(m) × w(c) / Σ w(active campaigns on m 
 | Spacing between sends from one mailbox | random 120–420 s | Minimum 60 s |
 | New threads per campaign per day | 30 | |
 | First touches per recipient corporate domain | 5 an hour, 20 a day (whole workspace) | |
-| Reply reserve | 15% of each mailbox's allocation | Replies may exceed the allocation by 10% |
+| Reply reserve | 15% of each mailbox's allocation, rounded up | Unused reserve isn't released. Replies may exceed the allocation by 10%, rounded up |
 | Follow-up wait | Set per step (§5.10) | At least 24 hours |
 | Steps per follow-up sequence | 3 for no-reply sequences, 2 for later stages | 6 |
 | Automated follow-ups per thread | n/a | 8 in any 30 days, across all sequences |
@@ -1297,7 +1397,7 @@ Catalyst SHOULD recommend adding mailboxes rather than raising per-mailbox volum
 
 #### 8.3.5 Showing why sending is slower
 
-- When a due send is pushed back, `threads.throttle_reason` records the limit responsible: `domain_ramp`, `domain_reputation`, `mailbox_cap`, `mailbox_health`, `campaign_share`, `campaign_limit`, `hourly_cap`, `recipient_domain` or `window`. The thread view shows it next to the next action ("Waiting: getacme.com is ramping up").
+- When a due send is pushed back, `threads.throttle_reason` records the limit responsible: `domain_ramp`, `domain_reputation`, `domain_auth` (first touches paused because SPF, DKIM or DMARC fails, §8.9), `mailbox_cap`, `mailbox_health`, `campaign_share`, `campaign_limit`, `hourly_cap`, `recipient_domain` or `window`. The thread view shows it next to the next action ("Waiting: getacme.com is ramping up").
 - Each campaign has a daily **sending pace**: first touches wanted, allocated and sent, the main limit, and a forecast finish date. It appears on the campaign Overview (§15.9) and in `getSendingCapacity`.
 - The plan also projects 7 days ahead, assuming every band stays Healthy. The preflight estimate (§8.11) and campaign forecasts use this projection, so they account for the ramp and for other campaigns sharing the same mailboxes.
 
@@ -1881,7 +1981,7 @@ Every row is an OpenAPI operation, and therefore an MCP tool unless marked †.
 | POST `/contacts/{contactId}/verify` | `verifyContactEmail` | contacts:write |
 | GET `/contacts/{contactId}/export` | `exportContactData` | contacts:read |
 | GET `/contacts/duplicates` | `listDuplicateContacts` | contacts:read |
-| POST `/imports` · GET `/imports/{importId}` · POST `/imports/{importId}/commit` | `createImport` · `getImport` · `commitImport` | contacts:write |
+| POST `/imports` · GET `/imports/{importId}` · POST `/imports/{importId}/preview` · POST `/imports/{importId}/commit` | `createImport` · `getImport` · `previewImport` (dry run) · `commitImport` | contacts:write (get: contacts:read) |
 | GET/POST `/companies`, GET/PATCH/DELETE `/companies/{companyId}` | `listCompanies` `createCompany` `getCompany` `updateCompany` `deleteCompany` | contacts:* |
 | GET/POST `/tags`, DELETE `/tags/{tagId}` | `listTags` `createTag` `deleteTag` | contacts:* |
 | GET/POST `/lists`, GET/PATCH/DELETE `/lists/{listId}` | `listLists` `createList` `getList` `updateList` `deleteList` | contacts:* |
@@ -1895,7 +1995,7 @@ Every row is an OpenAPI operation, and therefore an MCP tool unless marked †.
 | Method & path | operationId | Scope |
 |---|---|---|
 | GET/POST `/campaigns` | `listCampaigns` / `createCampaign` | campaigns:read / write |
-| GET/PATCH/DELETE `/campaigns/{campaignId}` | `getCampaign` / `updateCampaign` / `deleteCampaign` (draft only) | |
+| GET/PATCH/DELETE `/campaigns/{campaignId}` | `getCampaign` / `updateCampaign` (settings, including `agent_mode`) / `deleteCampaign` (draft only) | |
 | POST `/campaigns/{campaignId}/archive` | `archiveCampaign` | campaigns:write |
 | GET `/campaigns/{campaignId}/preflight` | `runCampaignPreflight` | campaigns:read |
 | POST `/campaigns/{campaignId}/launch` · `/pause` · `/resume` | `launchCampaign` · `pauseCampaign` · `resumeCampaign` | campaigns:write (launch also messages:send) |
@@ -1928,6 +2028,7 @@ Every row is an OpenAPI operation, and therefore an MCP tool unless marked †.
 | POST `/threads/{threadId}/ai-draft` | `generateAiDraft` (optional `guidance`) | threads:write |
 | POST `/threads/{threadId}/next-action/send-now` · `/skip` · PATCH `/next-action` | `sendNextActionNow` · `skipNextAction` (for a follow-up: moves to the next step) · `rescheduleNextAction` | messages:send / threads:write |
 | POST `/threads/{threadId}/follow-ups/stop` · `/resume` | `stopFollowUps` · `resumeFollowUps` (resuming restarts the current stage's sequence at the next unsent step, timed from now) | threads:write |
+| POST · DELETE `/threads/{threadId}/check-in` | `scheduleCheckIn` (one check-in on a date the contact asked for, in place of the sequence: §5.10 rule 5) · `cancelCheckIn` | threads:write |
 | GET `/messages/{messageId}` · GET `/messages/{messageId}/raw` | `getMessage` · `getMessageRaw` † | threads:read |
 | GET `/drafts` | `listPendingDrafts` | threads:read |
 | PATCH `/messages/{messageId}` | `updateDraft` (draft, pending or scheduled only) | threads:write |
@@ -1957,8 +2058,10 @@ Every row is an OpenAPI operation, and therefore an MCP tool unless marked †.
 | GET `/mailboxes/{mailboxId}/poll-runs` | `listPollRuns` | mailboxes:read |
 | GET `/mailboxes/{mailboxId}/stats` | `getMailboxStats` | mailboxes:read |
 | POST `/mailboxes/{mailboxId}/pause` · `/resume` | `pauseMailbox` · `resumeMailbox` | mailboxes:write |
+| POST · DELETE `/mailboxes/{mailboxId}/dkim` | `createMailboxDkimKey` (Catalyst signs a generic host's mail; returns the TXT record) · `deleteMailboxDkimKey` | mailboxes:write |
 | GET `/oauth/{provider}/start` · `/oauth/{provider}/callback` | † | session only |
 | GET/POST `/domains`, GET/DELETE `/domains/{domainId}`, POST `/domains/{domainId}/check` | `listDomains` `createDomain` `getDomain` `deleteDomain` `checkDomainDns` | mailboxes:* |
+| POST `/domains/{domainId}/first-touches/resume` | `resumeDomainFirstTouches` (after the §8.9 authentication breaker; needs `acknowledge_cause` and passing records) | mailboxes:write |
 | GET `/deliverability` | `getDeliverabilityOverview` | mailboxes:read |
 | GET `/domains/{domainId}/reputation` | `getDomainReputation` (score, band, the points each input cost, 30-day history) | mailboxes:read |
 | GET/PATCH `/domains/{domainId}/ramp` | `getDomainRamp` (plan, step, schedule, planned vs sent, history) / `updateDomainRamp` (plan, custom schedule, reason) | mailboxes:read / settings:manage |
@@ -1977,6 +2080,8 @@ Every row is an OpenAPI operation, and therefore an MCP tool unless marked †.
 | POST `/integrations/events` | `ingestIntegrationEvent` (signed; `{source, type, external_id, contact_email, goal_key?, value_cents?, occurred_at}`) | integration secret |
 | POST `/integrations/stripe/webhook` · `/integrations/calcom/webhook` · `/integrations/calendly/webhook` | † | provider signature |
 | GET/PATCH `/settings` | `getWorkspaceSettings` / `updateWorkspaceSettings` | settings:manage |
+| GET `/me/push` · POST `/me/push/subscriptions` · DELETE `/me/push/subscriptions/{subscriptionId}` | `getPushSettings` † `createPushSubscription` † `deletePushSubscription` † (browser push, §11.2) | session only |
+| GET `/settings/ai/usage` | `getAiUsage` (Settings → AI's spend chart and run health) | settings:manage |
 | GET/POST `/users`, PATCH/DELETE `/users/{userId}` | `listUsers` `inviteUser` `updateUser` `removeUser` | settings:manage |
 | GET/POST `/api-keys`, DELETE `/api-keys/{keyId}` | `listApiKeys` `createApiKey` † `revokeApiKey` † | session only (owner/admin) |
 
@@ -2664,6 +2769,9 @@ The **fake clock and injected randomness** (seeded RNG) are built in from day on
   - external reply in Sent → `paused`
   - reply on `exhausted` → reopens `active`
   - reply on `closed_lost` → `needs_human` (reopened)
+  - auto-reply or out-of-office on `closed_lost` → stays `closed_lost`
+  - reply stored after the close but dated before it → still reopens
+  - closed again after reopening → `closed_lost` with a new `closed_at`
 - **Scheduling math:** business days across weekends and blackout dates; contact timezone windows, including DST transitions (America/New_York March/November, Europe/Berlin, Australia/Sydney); window clamping; jitter bounds; warm-up cap per day; health multiplier; reply reserve; per-domain throttles.
 - **Thread matching:** headers, References order, DSN original extraction, subject normalization (`Re: RE: AW: Fwd: [EXT]`), sender fallback window, new participant.
 - **Classification** against a fixture corpus (§19.4): bounces (hard and soft) from Gmail, Outlook/Exchange, Yahoo, Postfix, Exim, qmail, Mimecast; OOO in 7 languages; auto-replies with and without headers; ARF.
@@ -2677,7 +2785,8 @@ The **fake clock and injected randomness** (seeded RNG) are built in from day on
   - schedules for each ramp plan; only sending days count; idle domains drop back after 14 days
   - band actions: move up, hold, recover after 2 Healthy days, step back, stop
   - the domain cap split across mailboxes
-  - reply reserve and the 10% reply overflow
+  - reply reserve and the 10% reply overflow, both rounded up; unused reserve never released to follow-ups or first touches
+  - whole numbers: band multipliers round down; largest-remainder splits add up exactly, with ties to the larger share, then the older ID
   - send order (replies, later-stage follow-ups, no-reply follow-ups, initial emails)
   - campaign shares by priority and weight; the midday rebalance
   - mailbox chosen at first send
@@ -2715,7 +2824,7 @@ Generate random sequences of up to 200 events (sends, accepts, bounces, opens wi
 5. `deriveThread` is deterministic, and evaluation is idempotent (`evaluate ∘ evaluate = evaluate`; no duplicate activities).
 6. Every scheduled send time falls inside the contact's window and respects spacing and caps.
 7. Goal *k* achieved implies goals 1..k−1 are achieved or implied.
-8. Daily sends never exceed the plan. Per domain: ≤ the domain cap. Per mailbox: ≤ its allocation, plus at most 10% for replies. Per campaign: ≤ its daily limit. The ramp step only rises on a day the band was Healthy.
+8. Daily sends never exceed the plan. Per domain: ≤ the domain cap, exceeded only by the reply overflow. Per mailbox: ≤ its allocation, plus at most 10% (rounded up) for replies. Per campaign: ≤ its daily limit. Follow-ups and first touches together never exceed a mailbox's allocation minus its reply reserve. The ramp step only rises on a day the band was Healthy.
 9. A follow-up is never sent if a human reply from the contact arrived after the wait started. No two follow-ups are scheduled on one thread at once. Every follow-up's send time is at least its step's wait after its anchor. A thread never gets more than 8 automated follow-ups in any 30 days.
 
 ### 19.4 Integration tests (GreenMail SMTP + IMAP)
@@ -2739,12 +2848,12 @@ Test topology: GreenMail users `alex@sender.test` (Catalyst mailbox) and `priya@
 | IT-13 | Poll cron registration and lock | `*/30 * * * *` per mailbox; concurrent `pollMailboxNow` → 409; worker restart after 2 h downtime → immediate catch-up poll |
 | IT-14 | Stripe `checkout.session.completed` webhook for the contact | Goal 2 achieved, goal 1 implied; thread `completed`; contact `customer`; webhook `thread.goal_achieved` emitted and signed |
 | IT-15 | Bounce breaker: 5 hard bounces in the first 50 sends | Campaign auto-paused; activity and notification created |
-| IT-16 | Caps and warm-up: 100 due sends on a day-1 mailbox | Exactly 10 sent; the rest rolled over in order of priority |
+| IT-16 | Caps and warm-up: 100 first touches due on a day-1 mailbox (warm-up cap 10; the domain cap isn't the limit) | Exactly 8 sent: the cap of 10 less a reply reserve of 2, which stays unused; the rest rolled over in order of priority |
 | IT-17 | One-click unsubscribe `POST /u/{token}`; then GET page without confirming | POST unsubscribes; GET alone does not |
 | IT-18 | Open pixel hits with MPP, scanner and human signatures | `machine_only` → then `opened`; stage `received`; counts right |
 | IT-19 | Unknown sender newsletter in INBOX | Not stored (only the dedupe digest); body never fetched |
 | IT-20 | `\Seen` flags before and after polling | Unchanged |
-| IT-21 | New domain, 3 new mailboxes, 500 contacts across 2 campaigns (high and normal priority) | Day-1 sends total the domain's first ramp step (20), not 3 × 10; split 3:2 by priority; a reply to an inbound message still goes out after the allocation is used up |
+| IT-21 | New domain, 3 new mailboxes, 500 contacts across 2 campaigns (high and normal priority) | Day-1 allocations total the domain's first ramp step (20, split 7, 7 and 6), not 3 × 10. The reply reserve takes 5 of the 20, so 15 first touches go out, split 9:6 by priority. A reply to an inbound message still goes out, from the reserve; the rest of the reserve isn't released |
 | IT-22 | Inject a 2.5% hard-bounce rate on the domain | Band → At risk; the next plan run holds the ramp and applies ×0.75; after 2 Healthy days the ramp moves up again; `domain.ramp_changed` webhooks sent |
 | IT-23 | Inject a blocklist hit | Score drops 30 and the blocklist breaker pauses every mailbox on the domain; nothing goes out until acknowledged; `domain.reputation_changed` and `deliverability.breaker_tripped` sent |
 | IT-24 | Admin sets a +50% cap override for 3 days, then tries +80% | First accepted, audited, and expires on day 4; second rejected with `validation_failed` |
@@ -2938,6 +3047,495 @@ Every E2E page gets an **axe-core** check (0 serious or critical violations) and
 | **M4 AI agent & escalations** | Jev conversation classification (client, question set, policy, fallback, Classification panel, Hot view), analysis, drafting, AI follow-ups (`ai_adapt`, `ai_write`) and not-now check-ins, personalization, autonomy policy, guardrails, KB, Needs-you queue, notifications, external agent mode, work queue | IT-04, 05, 10, 25–29; E2E-05, 09; §19.7 gates passed, including the Jev calibration report |
 | **M5 Integrations & polish** | Stripe/Cal.com/Calendly/generic events, outbound webhooks, dashboard analytics, knowledge-gap analytics, MCP prompts and resources, agent skill, performance work, docs | IT-14; §19.8 Claude Code acceptance; §19.10 go-live procedure; §19.12 |
 
+### 20.1 Implementation status
+
+As of 2026-11-11. This section records what has been built against this specification, where it lives, how it was checked, and where the code and the specification differ. It is updated as each piece of work lands.
+
+**In short:** the decision logic of M2 to M4, the database schema, the contact-management API (M1), the domain, mailbox, campaign and thread APIs, the outbound send path (scheduler, compose, pre-send guard, SMTP, Sent-folder copies and reconciliation), inbound polling over IMAP with deterministic classification, the mailbox connection test, open tracking and unsubscribe, MCP access, and a pg-boss worker are built. Replies, drafts and approval by hand, unmatched mail, the escalation queue, the work queue, the daily ramp and hourly reputation jobs, outbound webhooks, inbound integration events, analytics, the knowledge base API, workspace settings, the team and notifications are built. The agent answers human replies when `AI_ENABLED=true`. Jev classifies first when `TYPESAFE_API_KEY` and a pinned `TYPESAFE_MODEL` are set; without it, Claude classifies alone (the §10.4 fallback) and every AI reply waits for approval. The UI has sign-in, the shell, the Dashboard, Needs you (with every way to settle an item), the Inbox, the Thread view, the Campaigns list and detail with the Board, Contacts with Import, Companies, Lists and segments, Knowledge, Deliverability with the mailbox wizard, Settings, the campaign builder, and the ⌘K palette: every view of §15. People sign in with Better Auth sessions. 580 automated tests pass, and 53 end-to-end tests in Chromium; see "Second session" below.
+
+#### Second session (2026-11-11): what was added
+
+This section supersedes the older tables below where they disagree; those tables have not been rewritten yet.
+
+**Built and tested**
+
+- **M1 contacts API, nearly complete:**
+  - Companies, custom-field definitions (values type-checked on every write), static lists and dynamic segments.
+  - Suppressions with `checkSuppression`, the timeline and notes, `verifyContactEmail`.
+  - `upsertContacts`, `applyContactBulkAction`, `mergeContacts`, `listDuplicateContacts`, `eraseContact`, `exportContactData`, `searchAll`.
+  - CSV imports: `createImport`, `getImport`, `previewImport`, `commitImport`, and the `import.process` job.
+- **M2 sending infrastructure API:**
+  - Domains with DNS checks (`checkDomainDns`: SPF with lookup counting, DKIM key size, DMARC policy, MX, tracking CNAME), reputation, the ramp and its admin controls (plan, hold, resume, step back, cap override; IT-24 passes), all audited.
+  - Mailboxes with AES-256-GCM credentials under versioned keys (§16), pause and resume with breaker acknowledgement (§8.9), poll runs and stats.
+  - `testMailboxConnection` runs the §7.1 checklist and returns it step by step: SMTP and IMAP sign-in, SPECIAL-USE folders (stored in `mailboxes.folders`), a self-addressed email, finding it in INBOX (or Junk) within 120 s, reading its `Authentication-Results` into `sending_domains.alignment_status`, the Sent copy (setting `append_to_sent`), and deleting it. A pending or error mailbox becomes active when it passes.
+  - `pollMailboxNow` queues `mail.poll` and answers 409 `poll_in_progress` while one runs.
+  - `getSendingCapacity`: today's plan by domain, mailbox and campaign with what each used and the limit holding it, each campaign's pace and forecast finish date, and a 7-day projection with every band assumed Healthy (ramps move as `moveRamp` would after a sending day, warm-ups gain a step a day). `getDeliverabilityOverview`: each domain's reputation, DNS, alignment and ramp (today's cap and tomorrow's), each mailbox's status, health, sends, warm-up and last poll, today's totals with the main limit, and the 20 latest deliverability events.
+- **M3 campaign API:**
+  - Campaigns with the default sequences and starter copy, goals (create, update, delete, reorder, kept consistent with the sequences that cover them), the initial email, follow-up sequences, steps and variants. IT-33 passes.
+  - Template rendering (LiquidJS strict mode, §22.A), step preview with lint, preflight (§8.11) and enrollment with every skip reason of §8.5.
+  - The draft → active ⇄ paused → archived lifecycle; launch needs `messages:send` and a passing preflight.
+  - `getCampaignStats`: the funnel, threads by state, emails sent, opened by people, bounced and replied to, each step and A/B variant with its reply rate (a thread's first reply is credited to the last email sent before it), and each goal with its estimated value.
+- **M3 threads API:**
+  - `listThreads` (every §13.4 filter, sorting by `-temperature`), `getThread`, `updateThread` (assign, take over), `getThreadContext` (the §14.5 bundle), messages, activity, classifications and `listActivities`.
+  - By hand: goals (achieve and revoke, with implied goals and the lifecycle following), stage floor, pause and resume, close (optionally unsubscribing), stop and resume follow-ups, skip and postpone the next follow-up.
+  - Each change is evaluated straight after its commit, so the response shows the new state.
+  - Writing by hand: `createReply` (draft, send now, or schedule), `listPendingDrafts`, `updateDraft`, `approveDraft`, `rejectDraft`, `cancelScheduledMessage`, `lintMessage` and `sendNextActionNow`. A reply gets the composer's signature, footer, tracking and threading headers. A send is checked up front (suppression, subscription, do-not-contact, bounces, thread state, mailbox, lint, window, today's reply room) and answers 422 `send_blocked` with every failing reason.
+  - Unmatched mail: `listUnmatchedMessages`, `attachMessageToThread` (the email then has every effect a matched one would, through the same code as ingest) and `ignoreUnmatchedMessage`. Each settles the email's `unmatched_reply` escalation.
+  - `getMessageRaw` returns the MIME source as `message/rfc822`: operations can now declare a non-JSON `mediaType`.
+  - `generateAiDraft` and `reclassifyThread` are built with the AI agent (see below).
+- **Public endpoints (§8.8, §9):**
+  - The open pixel (`/t/o`), tracked links (`/t/c`) and the unsubscribe page with RFC 8058 one-click and a 30-day undo (`/u`). Bad tokens get identical answers.
+  - Opens and clicks are classified by a versioned rule set (`packages/email/src/open-classification.ts`, on `isbot`). IT-17 and IT-18 pass.
+- **The send path (§7.2):**
+  - `scheduler.tick` (every minute) builds today's capacity plan live, then checks windows, the mailbox, the capacity pools (replies, follow-ups, first touches, in that order) and recipient-domain limits, and composes or postpones with the limit as `throttle_reason`.
+  - `outbound.compose` renders, lints, adds tracking and unsubscribe, threads follow-ups under the conversation, and stores the email as scheduled.
+  - `outbound.send` runs the pre-send guard under row locks with the scheduled → sending gate, then submits over SMTP (Nodemailer, pooled per mailbox) and handles each answer: sent, retry with backoff, provider quota (pause and cut the limit), synchronous hard bounce, auth failure, refusal.
+  - Also `delivery.confirm` and `outbound.sweep` (stuck sends become `send_unknown` with an escalation).
+  - MIME is built per §7.2 with no tool fingerprint.
+  - IT-01, IT-02, IT-16 and the first step of IT-30 pass. The transport is tested against an in-process SMTP server.
+  - Sent folder: when the provider keeps no copy, `outbound.append_sent` APPENDs the exact bytes with `\Seen`. A `send_unknown` email is looked up in Sent by `outbound.reconcile`: found → `sent`, missing → one retry through the guard, undecidable → `send_failure` escalation.
+  - Click tracking (§9.3, a campaign's `click_tracking`): every link but unsubscribe links points through `/t/c/{token}` on the domain's own tracking host, with a `tracked_links` row keyed to the campaign link it matches; composed emails, replies and edited drafts alike. The visible link text and the plain-text part keep the original URL.
+  - DKIM signing by Catalyst (§7.1): `createMailboxDkimKey` makes a 2048-bit RSA key for a generic-host mailbox. The private key is sealed in `mailboxes.catalyst_dkim`, and the response gives the TXT record to publish (`catalyst._domainkey.<domain>` by default). The selector joins the domain's `dkim_selectors`, so the DNS check verifies the published key. The transport then signs each email (relaxed/relaxed, rsa-sha256, `d=` the From domain) through Nodemailer's DKIM option. A test checks the signature with an independent verifier, and a changed body fails it. `deleteMailboxDkimKey` stops signing. Migration: none; `catalyst_dkim` existed.
+    - *Spec silent:* the API, so the two operations are added (§13.4). Mailboxes on one domain share one key, so the domain needs one DNS record; the key goes once no mailbox uses it. Google and Microsoft mailboxes answer 409, since those hosts sign their own mail. `public_key` is kept beside the sealed private key, so the record can be shown without opening the secret.
+    - The signature is added at submission, so the copy stored for the Sent folder and the raw copy in storage are the unsigned bytes. They differ from what the recipient got only by the `DKIM-Signature` header.
+  - (AI-written steps: see the AI agent below.)
+- **Inbound (§7.3–§7.6):**
+  - `mail.poll` reads INBOX, Junk and Sent incrementally by UID: headers first, full messages (BODY.PEEK) only for mail that is ours, `last_seen_uid` saved after every message. A UIDVALIDITY change re-reads 30 days and relies on Message-ID dedupe.
+  - Polls run every 30 minutes with 0–120 s jitter (`mail.poll.all`), a catch-up poll runs on worker start for mailboxes not polled for 30 minutes, and a failed poll is retried after 1 and 5 minutes. Two failed scheduled runs in a row put the mailbox in `error` with a `mailbox.poll_failed` activity; a later good poll puts it back.
+  - Each message is matched (§7.4), classified deterministically (§7.5), stored with its raw MIME and attachments in object storage, and acted on: hard bounce, soft bounce (3 in 14 days count as hard), complaint, unsubscribe, out-of-office and auto-reply, human reply, new participant, attachments, replies found in Junk.
+  - Sent: our own emails are matched by Message-ID, or by recipient, subject and time when the provider rewrote it (the provider's ID is kept). A reply the operator typed in their own mail client is stored as `human_external`, supersedes pending AI drafts and pauses the agent (§7.6).
+  - Mail from unknown senders is never fetched or stored.
+  - IT-03 (header match, without the AI step), IT-09, IT-11, IT-13, IT-19 and IT-20 pass against an in-process IMAP server (hoodiecrow).
+- **Escalations** are raised with SLA due times in business hours (Mon–Fri 09:00–17:00 workspace time by default), assigned per §11.1, never stacked for the same reason.
+  - API: `listEscalations` (most urgent first, then soonest due; filters by status, priority, reason, thread, campaign, assignee and `overdue`), `getEscalation`, `resolveEscalation`, `snoozeEscalation`, `assignEscalation`, `dismissEscalation`. Settling the last open one takes the thread out of `needs_human`.
+  - `escalation.sla_check` (every 15 minutes) wakes snoozed escalations and raises an overdue one by one priority, with a new due time from the new priority's SLA. Notifications (§11.2) are built (see Notifications).
+  - `answerEscalation` is built with the AI agent (see below).
+- **Ramp, warm-up, scores and breakers (§8.3.2, §8.9, §8.10):**
+  - `capacity.plan` runs hourly and acts once per workspace day after local midnight: each domain's ramp moves by `moveRamp` from yesterday's sending (a day counts if it used half its cap) and today's band, each warming mailbox moves one step per Healthy day, and today's planned cap is stored in `domain_daily_stats`. Mailboxes paused for a provider quota open again on the next local day.
+  - `mailbox.stats_rollup` runs hourly: mailbox health and domain reputation from 7- and 30-day stats, with the small-volume rules and the 24-hour no-flapping band rule, band changes logged; the hard-bounce and complaint breakers pause a mailbox, a blocklisting pauses every mailbox on the domain, and 5 hard bounces in a campaign's first 50 sends pause the campaign. It also fills today's `domain_daily_stats`.
+  - The open pixel now counts a message's first human open in `mailbox_daily_stats.opens_human`, on the day it was sent.
+  - `deliverability.blocklist_check` (every 6 hours) queries Spamhaus DBL (through a DQS key when `SPAMHAUS_DQS_KEY` is set), SURBL and URIBL. A new listing pauses every mailbox on the domain at once; delisting needs every list to answer clear, and the mailboxes stay paused until a person resumes them.
+  - `deliverability.dns_check` (daily) re-runs the §8.2 check for every domain and logs `domain.dns_changed` with the records that changed.
+  - The authentication breaker (§8.9): when a DNS check (daily or `checkDomainDns`) finds SPF, DKIM or DMARC failing that passed or warned before, first touches from the domain stop. The trip sets `sending_domains.first_touches_paused_at` and `first_touches_paused_reason` (the records), logs `deliverability.breaker_tripped` (scope `domain_first_touches`), and sends an urgent notification. The workspace's scores and bands are recomputed at once. The capacity plan gives the domain's mailboxes no first-touch pool, with the throttle reason `domain_auth`; follow-ups and replies still go. `resumeDomainFirstTouches` lets first touches go again, with `acknowledge_cause: true` (audited) and only once no auth record fails. Fixing DNS alone doesn't resume. Migration `0009_auth_breaker`.
+    - *Spec silent:* what "starts failing" means. It means a record that passed or warned and now fails. A domain that never passed doesn't trip, since failing DNS already blocks launch (§8.2).
+    - *Spec silent:* follow-ups. §8.9 pauses "new first touches" and allows replies; follow-ups to threads already started go on too.
+    - *Spec silent:* how this breaker is undone. `resumeDomainFirstTouches` is added (§13.4).
+  - Warn-level trips (§8.9's Warn column) are logged by the hourly rollup as `deliverability.breaker_tripped` or `campaign.breaker_tripped` with `level: warn`. They cover hard bounces ≥ 2% and complaints ≥ 0.1% per mailbox, 3 hard bounces in a campaign's first 50 sends, the human-open collapse and 2 or more junk replies in 7 days. Each is logged once per signal and target in a rolling 7 days, and pauses nothing. They aren't mailed one by one: the daily digest lists the last day's warnings, with the level at which each would pause. This also fixes a bug: a campaign warning used to send the urgent "campaign paused" alert.
+    - *Spec silent:* how a warning reaches anyone. §8.9 says "every trip creates … an urgent notification", but its warnings pause nothing; they are treated as normal (§11.2) and go into the digest.
+    - *Spec silent:* the open-rate collapse's window. It compares the last 7 days with the 23 before them, from the daily stats, rather than the latest 200 sends.
+  - `capacity_plans` rows: the hourly rollup stores today's allocation per mailbox and bucket (each campaign's first touches, `follow_ups`, `reply_reserve`) with what has been used, and the 7-day forecast, updated in place. The scheduler still plans live; the rows are the record. The forecast now keeps a domain's first touches paused while the authentication breaker holds.
+  - Google Postmaster Tools (§8.10), v2 API, checked against Google's reference: `GET /api/v1/domains/{domainId}/postmaster/connect` (session only) asks Google for `postmaster.traffic.readonly` and keeps the refresh token sealed on the domain (`postmaster_credentials_enc`, migration `0015_postmaster`). It shares the mailbox callback, since the signed state says which flow it is. `deliverability.postmaster_sync` runs daily at 06:15 UTC and right after connecting. It asks `domainStats:query` for the last 7 full days, daily: `SPAM_RATE`, and `AUTH_SUCCESS_RATE` filtered by `auth_type` spf, dkim and dmarc. It also reads `complianceStatus` (the requirements marked `NEEDS_WORK` and the deliverability verdict) and keeps it all in `postmaster_data`. The Domain object shows it as `postmaster`. The rollup counts the latest Gmail spam rate as the complaint rate when it is higher, and `needs_work` compliance as failing authentication (−20, §8.10). No rows means "no data", which is neutral. A 403 or 404 says the Google account can't see the domain. `invalid_grant` disconnects the domain and logs `domain.postmaster_disconnected`. Tested against a stand-in API.
+    - **To confirm** with live data: that `SPAM_RATE` comes as a fraction (0.001 for 0.1%), as v1's ratios did, and that each `DomainStat.metric` carries the name given in the request. The reference doesn't say either.
+  - Not built: IP blocklists for dedicated IPs. (Notifications for trips are built: see Notifications.)
+- **Outbound webhooks (§13.6):**
+  - `listWebhookEndpoints`, `createWebhookEndpoint` (the `whsec_` signing secret is returned once, stored sealed), `updateWebhookEndpoint`, `deleteWebhookEndpoint`, `testWebhookEndpoint`, `listWebhookDeliveries`, `redeliverWebhook`. The OpenAPI document declares every event under `webhooks`.
+  - Events come from the activity log: `webhook.dispatch` (every minute) turns each subscribed activity into one delivery per endpoint, with the §13.6 envelope and an `evt_` ID that is the same for every endpoint. `webhook.deliver` signs (`Catalyst-Signature: t=…,v1=…`), POSTs with a 10 s timeout, and retries at 1 m, 5 m, 30 m, 2 h, 6 h, 12 h and 24 h; an endpoint failing for 3 days is turned off (`webhook.disabled`).
+  - SSRF: https only, no credentials in the URL, no local names, and every resolved address public (IPv4 and IPv6 private, loopback, link-local, CGNAT, documentation and multicast ranges are refused), checked at registration, again before each delivery, and once more at connect time inside the HTTPS client's DNS lookup, against rebinding.
+  - The notification when an endpoint is turned off is built (see Notifications).
+- **Live updates (§4.2):** a trigger on `activities` (migration `0010_activity_notify`) NOTIFYs `catalyst_activity` with `<workspace_id>:<activity_id>`. In each app process, one connection LISTENs, opened when the first stream does. `streamEvents` (`GET /events/stream`, any key, not an MCP tool) is a `text/event-stream` of the workspace's new activities in their API shape. The event name is the activity's type and the event ID is its ID. `Last-Event-ID` replays up to 500 missed events first, each event is sent once even when both replayed and announced, a comment every 25 s keeps the connection open, and the connection is released when the client goes. Tested against a real LISTEN/NOTIFY.
+    - *Spec silent:* what an event is. It is one activity, the same events webhooks are built from.
+- **Rate limits (§13.3):** every request from a known caller counts in Postgres (`rate_limit_windows`, fixed one-minute windows, shared by every app process). The limits are 600 a minute per key, and 60 a minute for the operations marked as reaching the outside world: sending a reply, approving, launching, sending a next action now, and testing or redelivering a webhook. Every response carries `RateLimit-Limit`, `RateLimit-Remaining` and `RateLimit-Reset` for the tightest bucket used. Past the limit the answer is 429 `rate_limited` with `Retry-After`. A request counts once the caller is known, even if it is then refused as invalid. Migration `0011_rate_limits`.
+    - *Spec silent:* the header format and which operations are "send/approve". The headers are the IETF draft's `RateLimit-*` trio. The send set is the operations whose MCP tools carry `openWorldHint` (§14).
+    - *Spec silent:* unauthenticated routes (tracking, unsubscribe, provider webhooks) have no key to count and aren't limited here.
+- **UI (§15):** Tailwind CSS v4 with §15.2's tokens (zinc neutrals, indigo accent, 1 px borders, 8 px and 6 px radii, light and dark from the system, reduced motion respected) and lucide icons. Pages fetch through TanStack Query over an `openapi-fetch` client typed by `openapi-typescript` from the contract's OpenAPI document (`apps/web/src/lib/api-types.ts`, regenerated with `pnpm --filter @catalyst/web generate:api`; a test fails when it is stale). Every read and change goes through the public API with the session cookie (D10).
+  - `/sign-in`: email and password, the first-time password for an invited address, and the TOTP step when two-factor sign-in is on.
+  - The signed-in layout checks the session on the server and sends anyone else to sign in. The shell (§15.3) has the sidebar with the Needs-you count (rose when anything is urgent), the person and sign-out, and the two-factor banner when the workspace requires it; an owner who must set up two-factor is sent to Settings → Security from every page.
+  - V1 Dashboard (§15.4) from `getDashboardOverview`: what needs you, today's sends against the plan, the 7-day reply rate and its change, goals reached, live campaigns' funnels, deliverability at a glance.
+  - V2 Needs you (§15.5) from `getWorkQueue`: a list, most urgent first (priority pill pairing colour, icon and label; the kind; time left or overdue), and the selected item on the right. An escalation shows the contact and campaign, the reply that raised it, and its actions (below); a draft shows the draft card; unmatched mail links to Inbox → Unmatched; external-agent items link to the thread. "Review drafts" lists only drafts. On narrow screens list and detail stack.
+  - Escalation card (Needs you and the Thread view, §11.3): the reasons, the questions the agent couldn't answer, "Answer for the agent" (`answerEscalation`, with "Save to the knowledge base" for this campaign or every one), "Write it myself" (to the composer), Confirm and Not yet on a goal confirmation, "I replied: done" (`replied`), Take over thread, Snooze (1 hour, tomorrow 9:00, Monday 9:00) and Dismiss with a reason.
+  - Draft card: the text, its lint findings (blockers disable approval), Approve and send now or at a time, Edit (`updateDraft`), Regenerate with feedback, and Reject with a reason and feedback.
+  - V3 Inbox (§15.6) from `listThreads`: views All, Needs you (`needs_attention`), Hot (`min_temperature=2`, hottest first), Assigned to me and Unmatched; search; filters for campaign, stage, state, opens and mailbox; optional Intent and Temperature columns. The view and filters live in the URL. Pages load 50 at a time. Unmatched lists `listUnmatchedMessages` with Attach to thread (the sender's threads to pick from) and Ignore.
+  - V4 Thread view (§15.7): the header (contact, company, campaign, subject; Assign to me, Take over / Hand back to the agent, Close with a reason and an optional unsubscribe), the stage ladder with the campaign's goals, open escalations, the conversation (each email with its author badge, step label, status, opens, attachments, error, "View original" from `getMessageRaw`, and Cancel sending while scheduled; the latest open, the rest folded; inbound shows the reply without quoted text, with "Show quoted text"), stage, state and goal changes as hairline dividers, drafts as cards, and the composer. The right panel folds into Status (next action and why it was pushed back, follow-up progress, check-in, opens as in the Inbox, so an open only a proxy or scanner made shows here too; Send now, Skip, Reschedule, Stop and Resume follow-ups, Pause and Resume thread, Check in on a date, Cancel check-in), Contact, Classification, AI summary, Goals (Mark achieved with evidence and the event's time; Revoke the highest with a reason), Activity and AI decisions.
+  - Classification panel: the intent with its probability bar, sentiment, temperature as four steps, "Classified by Claude only" in fallback, each goal's and each flagged escalation question's probability from the latest Jev run with a sparkline across runs, highlighted when it sits in an "ask a person" band (goals from the workspace's `goalAsk` up to the campaign's auto-confirm threshold; escalation questions from `escalationFlag`), and Reclassify.
+  - Composer: write, then Send now, Schedule at a time, or Save as draft; "Ask AI to draft" with optional guidance (`generateAiDraft`). The text is linted as typed (`lintMessage`); blockers disable sending. Hidden while the thread is unsubscribed or bounced or has no mailbox.
+  - V5 Campaigns list (§15.8): a table of campaigns with status, autonomy (or "External agent"), mailboxes, a mini funnel, reply rate, threads that reached a goal, how many need a person, and when each last changed; archived ones behind a toggle. "New campaign" waits for the builder.
+  - V6 Campaign detail (§15.9): the header (status, autonomy, mailboxes, enrolled; Preflight with every check and the audience; Launch for a draft, behind a confirmation that names how many contacts start and is disabled while preflight fails; Pause, Resume; Archive behind a confirmation) and the tabs, kept in the URL:
+    - Overview from `getCampaignStats` (whole campaign, or the last 7 or 30 days): the funnel with step conversion, emails (sent, opened by people, replied, bounced, with rates), goals with value and the attributed total, threads by state (Needs you and To approve link to the filtered Inbox), each step and A/B variant, and the Sending pace card from `getSendingCapacity` (wanted, allocated and sent today, waiting, the limit holding it, "(held by an admin)" when that is the ramp of a domain an admin is holding, the finish date).
+    - Board: a column per stage and per goal, Queued folded; cards with contact, company, opens, state, next action and temperature; each column sorts by temperature. Dragging forward onto a goal asks "Mark ⟨goal⟩ achieved?" (with evidence); dragging back from a goal asks "Revoke ⟨goal⟩?" (with a reason); both can be undone. Each card's "Move to…" menu does the same without a mouse. Columns show up to 50 cards.
+    - Threads: the Inbox table for the campaign, with the intent and temperature columns.
+    - Emails: the initial email with its variants and template issues, a sketch of a typical cadence in business days, one card per sequence in stage order (stages, name, each step's wait, subject or "Re:", text, mode and A/B count, then the final wait and finish rule), dashed cards for stages without follow-ups, and the final goal's line.
+    - Goals: the goal cards with key, final and customer marks, value, success criteria, detection methods (and whether AI confirms alone), tracked link, lifecycle effect and playbook, under a short explainer of goals and stages.
+    - Agent and Settings: every setting of §15.9 in words (autonomy with its explanation, thresholds, persona, instructions, links, reply delay and limits; mailboxes and weights, priority, window, blackout dates, caps, tracking, compliance, enrollment rules, delivery grace).
+  - V8 Contacts list (§15.11): search; filters for lifecycle, tag, email status and subscription, and a sort, all in the URL; a table with the email status mark (✓ valid, ⚠ risky or catch-all, ✕ invalid or bounced, ⦸ unsubscribed, complained or do-not-contact, ? unchecked, each with its reason), title, company, lifecycle, last touch and last open; 50 a page. Selecting contacts opens the bulk bar: Enroll in campaign (with the skip reasons), Tag, Add to list (static lists), Verify, Suppress (with a reason), Export (downloads the CSV) and Delete. "Add contact" creates one by email, name and title, then opens it.
+  - V9 Contact detail (§15.12): name, title, company, email with its status, timezone and owner; Lifecycle, tags (add and remove) and Do not contact, changed in place; the timeline across campaigns (All, Emails, Status, Notes, Changes; thread entries link to the thread) with "Add a note"; Details (phone, LinkedIn, location, consent, source, custom fields, notes), edited in place; the campaigns the contact is in with stage and state; Enroll, Export (downloads the JSON of `exportContactData`) and Erase behind a confirmation (`contacts:erase`).
+  - V16 Settings (§15.18), one section at a time in the URL; sections a role can't use are listed, disabled:
+    - Workspace: name, postal address, timezone (with the zone list), business hours.
+    - Team: invite (name, email, role, with what each role may do), change roles (only an owner makes owners), remove behind a confirmation.
+    - AI: the month's spend against the budget with its level, the budget, spend by day for 30 days, each task's model and effort (with its runs, cost, failures and guardrail blocks, and "Default" for an override), disclosure, Jev's version and who pinned it, the 7-day fallback and disagreement rates, the workspace pin, and the thresholds in words, editable, with "Back to the defaults".
+    - Notifications: browser alerts (turn them on in this browser, list and remove browsers), the person's alert and digest mail, and for owners and admins the Slack webhook (write-only: replace or stop) and quiet hours.
+    - Security: the person's own two-factor sign-in through Better Auth (password, then the key and the otpauth link for an authenticator app, the backup codes, and a code to confirm; or turn it off with the password), and for owners and admins the rule that owners must use it. An owner the rule applies to is sent here from every page and sees only this section until it is on; then the rest opens.
+    - Integrations: connect Stripe, Cal.com or Calendly with their signing secret, or a generic sender (its secret shown once); the webhook address to give the provider, with copy; disconnect; recent events with their outcome, and Attach for one that matched no thread (the contact's thread and the goal it reached).
+    - Webhooks: add an endpoint (URL, purpose, events from the OpenAPI document's list; the secret shown once), send a test, the delivery log with redeliver, change events, turn off or on, delete.
+    - API & agents: make a key from §14.2's presets (Read-only, Agent: draft only, Agent: full, Admin) with its scopes listed, the secret shown once with the `claude mcp add` command to copy, the key list (prefix, scopes, whether it can send, last use) with revoked ones on request, and revoke behind a confirmation.
+  - V13 Deliverability (§15.15), tabs in the URL:
+    - Overview from `getDeliverabilityOverview`: a card per domain (reputation and band, the ramp's plan, step, today's cap and tomorrow's if Healthy, each DNS record's mark, blocklists), the mailboxes (health, sent against today's cap, warm-up or why it is paused, last poll), today's capacity with its main limit, and recent events.
+    - Domains: each domain with its band, ramp, first-email pause and DNS state, and "Add domain" (tracking host and starting plan).
+    - Mailboxes: a table with status, health, today's cap, daily limit, warm-up and last poll.
+    - Capacity from `getSendingCapacity`: each waiting campaign's priority (changed in place, the same setting as on the campaign), wants, allocated, sent, waiting, the limit holding it and its finish date; the 7-day forecast by domain; and each mailbox's cap split into replies, follow-ups and first emails.
+    - Events: `domain.`, `mailbox.` and `deliverability.` activities and campaign breaker trips, newest first, with who and why.
+    - A domain's page: reputation (30 days of scores by band, the points each input cost, Gmail spam rate), the ramp (plan, step, today, tomorrow, target, status and its reason, override, planned and sent by day, the step table, the moves) with Hold or Resume, Step back, Override cap (at most 14 days) and Change plan (Established for admins), each behind a reason; capacity today by mailbox and campaign; and folding sections for DNS (each record's message, expected value to copy, what was found, "Check DNS now"), blocklists, and Postmaster Tools (sync, spam rate, authentication, requirements; Connect). A first-email pause shows at the top with "Resume first emails" after "I fixed the cause".
+    - A mailbox's page: status, health and provider; Test connection (the checklist), Check for mail now, Pause with a reason, Resume (a breaker's pause asks "I read the cause and dealt with it" first); 30 days of sends, replies and hard bounces with totals; the health points lost; warm-up; the last polls; the limits editor with warm-up and signature; Catalyst's DKIM key for "other" providers (make, copy the record, delete); and removal.
+  - V14 Mailbox setup wizard (§15.16): provider → OAuth (Google, Microsoft) or a password with the hosts (warning when the address's domain isn't added yet) → the connection test checklist, line by line → limits with warm-up explained, and the signature → done.
+  - V10 Import (§15.13): drop or choose a CSV (read in the browser, at most 20 MB) → the mapping table, column by column with sample values, from the suggested mapping, "Custom field…" taking a key → options (existing contacts: leave, fill empty fields or overwrite; consent basis; a static list; an owner; tags) → the dry run's counts (new, update, unchanged, invalid, suppressed, duplicates in the file) with the first problems → Import. Then a progress bar while the worker runs, the result counts, and the problems to download as CSV.
+  - V11 Companies (§15.14): the table (domain, industry, size, country, contacts) with search and "Add company"; a company's page with its contacts and their lifecycle, its details and notes edited in place, custom fields, and delete (its contacts stay, unlinked).
+  - V12 Lists & segments (§15.14): static lists and segments in two tabs with member counts; a new segment is built in the FilterBuilder (conditions on contact fields, a tag, or `custom.<key>`, joined by AND or OR, operators that fit each field, ages such as -30d for times) with a live count and sample from `previewSegment`; a list's page renames it, edits a segment's filter with the same preview, lists members (removing them from a static list), "Enroll list" in a campaign with the skip reasons, and deletes it.
+  - V15 Knowledge base (§15.17): items grouped by kind, filtered by scope, source and active state, with Internal and "Learned from escalations" marked; the editor (title, kind, scope, tags, visibility with what each means, markdown content, active); delete behind a confirmation; "Test the agent" (`testKnowledge`: Answerable ✓ with the cited items and a sample answer, or "Would escalate: knowledge gap"); and a "Knowledge gaps" callout listing the unanswered questions of the last 90 days.
+  - V7 Campaign builder (§15.10): `/campaigns/new` takes the name, objective (with an example) and owner and creates the draft with its default sequences; `/campaigns/{id}/build?step=…` carries on, saving as it goes, with Back and Continue and a step bar that jumps:
+    - Goals: each goal edited in place (name; key, derived from the name for a new goal; value; when it counts as achieved; detect via AI, booking or payment event, link click, manual, and whether the AI may confirm it alone; playbook; lifecycle effect; marks a customer), moved up or down, deleted, and "Add goal".
+    - Audience: enroll a list or segment, with the counts enrolled and skipped and each skip reason; the enrollment rules (skip contacts active elsewhere, cooldown days, role accounts, risky addresses).
+    - Emails: the initial email's mode (Template, AI opening line, AI writes) and guidance, its A/B variants (subject, text, weight, active; add and delete), template problems, and a rendered preview with lint; then each sequence in stage order with its steps (wait, unit, counted from the last message or the goal's event, mode, sent as a reply, guidance, the variant's subject and text), adding and removing steps, the final wait and finish rule, active, delete, and the stages it follows up at, where a stage another active sequence covers is shown greyed with "used by …" (the API refuses it with 409 `stage_already_covered`); "Create sequence" for a stage without one; and a Preview of every step, for a sample contact or for anyone already in the campaign (an AI step shows what the AI will do with its brief; no model is called).
+    - Agent: who writes (Catalyst's agent, or your own through the API and MCP, §10.7), autonomy with what each level means, persona, campaign instructions, allowed links, reply delay, AI replies per thread, "not interested" handling, standing back after your own reply, and the knowledge base starter checklist (pricing, product summary, five questions).
+    - Sending: mailboxes and weights; the sending window, blackout dates, new conversations a day, priority; tracking with the deliverability note; compliance; delivery grace.
+    - Review: the full preflight with "Fix →" to the step (or the Domains tab) for each item that fails or warns, the initial email rendered for three enrolled contacts, a forecast of sending days at the daily limit, and Launch behind a confirmation naming the contacts that start.
+    - "New campaign" on the list opens it; a campaign's page has "Continue setup" for a draft and "Edit" otherwise.
+  - The ⌘K palette (§15.3): ⌘K or Ctrl-K anywhere, or the header's search box; `searchAll` results grouped as contacts, companies, threads and campaigns, then commands (go to each view, Hot conversations, New campaign, Import contacts, Add a mailbox) filtered by what the person may do; arrows, Enter and Escape.
+  - Across every view (§15.20, §4.2):
+    - Live updates: the shell follows `/events/stream` and refreshes what each activity touches (thread, contact, campaign, work queue, deliverability…), batched every half second; a new reply or escalation is announced in a polite live region with a link, for eight seconds.
+    - Errors: the problem's words; under them the request ID (`instance`) and, for anything fetched, Retry; a 403 says to ask an owner or admin.
+    - Phones: below 768 px the sidebar is a drawer behind a menu button; lists and details stack; wide tables scroll in their own box (positioned, so screen-reader-only labels in their cells scroll with them instead of widening the page). The end-to-end suite checks twenty views at 390 px for sideways scrolling.
+    - Keyboard (§15.3's list): "Skip to content"; ⌘K; `g` then `d`, `n`, `i`, `c` or `o` goes to the Dashboard, Needs you, the Inbox, Campaigns or Contacts; `?` shows every shortcut. In Needs you, `j` and `k` move, `e` approves the selected draft, `s` snoozes the selected escalation, `t` takes its thread over, `r` opens the thread's reply box, Enter opens the thread. In the Thread view, `r` goes to the reply box (so does arriving at `#composer`) and `e` approves the waiting draft. The Board's "Move to…" menus. Shortcuts are ignored while typing in a field.
+      - *Spec silent:* how long `s` snoozes. Until 9:00 tomorrow, the commonest of the card's three choices; the card's menu still offers the others.
+    - Accessibility (§15.20, WCAG 2.2 AA): first Lighthouse's audit on six views, which found low-contrast grey text (zinc-400 on white, 2.6:1; such text became zinc-500, 4.8:1) and headings that skipped a level. Then axe-core in the end-to-end suite on every view in light and dark mode (below), which found: muted text in dark mode (zinc-500 on zinc-950 is 4.1:1; each use now has `dark:text-zinc-400`); muted text on tinted backgrounds (the builder's and the mailbox wizard's step bars, a selected knowledge item, the Inbox's unmatched count: zinc-600 now); a button inside a `<summary>` (the side panel's Reclassify and the contact's Edit, now beside it); links told apart only by colour inside sentences on Deliverability (underlined now); and links under 24 px tall in a campaign's Threads card. All views now pass with no serious or critical violation. Screen-reader use hasn't been tried.
+  - The push service worker (`apps/web/public/sw.js`): shows each pushed alert (title, summary; urgent ones stay until dismissed) and opens its link on a click, focusing an open Catalyst window; links to other sites open Needs you instead. It caches nothing.
+  - Verified: typecheck and `next build`; then in a headless Chrome against a seeded scratch database (a campaign with two goals and a follow-up sequence, three threads, a knowledge-gap escalation, a goal confirmation, an AI draft, a Jev classification history and an unmatched reply): first-time sign-up, the Dashboard, the Inbox with its counts, the Thread view with every panel filled, Confirm on the goal confirmation (goal recorded, stage moved, queue count down), the live lint findings, saving a draft, approving the AI draft (scheduled, approved), rejecting a draft, and attaching the unmatched reply (the thread moved to Responded). Then the Campaigns list, a campaign's Overview, Board (marking a goal from a card's menu, the card moving, and Undo), Emails, Goals, Agent and Settings tabs, and Preflight with Launch held back while checks fail. Then the Contacts list, tagging two contacts in bulk, and a contact's page: the timeline, adding a note, changing the lifecycle stage, editing a detail, and Export. Then every Settings section; saving the workspace and the AI budget; making an API key; inviting someone; connecting Stripe; adding a webhook endpoint; and two-factor end to end: requiring it for owners (the API answered 403 `two_factor_required` at once), being sent to Security from the Inbox, setting it up with a code computed from the key, and the app opening again. Then Deliverability: the overview, holding a domain's ramp with a reason, pausing and resuming a mailbox, saving its limits and signature, the Events tab showing all three with their reasons, the other tabs, and the wizard up to a connection test that failed as it should against `.invalid` hosts. Then adding and editing a knowledge item; a company's page and saving a detail; building a segment with two conditions, its live count, and its members; and an import from a dropped CSV through the mapping, the dry run (one new, one unchanged, one invalid, one repeated) and commit to the progress view. Then the builder end to end: a new draft, a goal with its derived key, enrolling a list (all three skipped as active elsewhere, then enrolled once that rule was off), writing the initial email and its preview with the footer, choosing the mailbox, switching to an outside agent and back and choosing Manual, and Review's preflight (two items failing as they should: the default follow-up's placeholder text, an unchecked domain), three samples and Launch held back; and the palette finding a contact and opening it with Enter. Then live updates (an activity row inserted in the database reached the open Inbox through the trigger and the stream, and was announced with a link to its thread), the error state on a missing thread (message, Retry, request ID), the 390 px layout with the drawer, and j then e approving a draft in Needs you. The worker wasn't running (it would also have started blocklist lookups for the scratch domain), so the import stayed at 0 rows, and "Test the agent" wasn't tried (it calls Claude). Browser alerts were not tried: the scratch server had no VAPID keys, and a headless browser has no push service. The automation browser ran JavaScript very slowly (a 5 KB script took seconds to evaluate while the server answered in under 100 ms), so load times were not measured. The AI actions (Answer for the agent, Ask AI to draft, Regenerate, Reclassify) were not run, as they would call the Claude API. The end-to-end suite below now repeats most of these checks on every push.
+  - Not built, by view:
+    - Everywhere: loading skeletons (views say "Loading…"), the compact density toggle, the poll-status header, shadcn/ui components, Geist fonts (the stack falls back to Inter or the system font), and `⇧enter` (send from the composer).
+    - Inbox and Thread view: saved views; the "Awaiting reply", "Scheduled" and "You're handling" views (`listThreads` has no filter for them); the Thread view as a side panel; hovering a sparkline point to open its message; the "Jev and Claude disagree" chip (the classification in the API doesn't carry the disagreement); "Load images" for inbound HTML (below).
+    - Campaigns: the Threads tab's bulk actions, per-step stats on the Emails tab, the Board's undo after a reload; in the builder, "Draft with AI from my objective" (it would call Claude), dragging goals and steps (they move with buttons), a variable picker that inserts (the variables are listed), and a timeline sketch per sequence (the Emails tab shows the first).
+    - Contacts: configurable, sortable and resizable columns; saved views; Campaign, Stage and Opened filters (`listContacts` has none) and the AND/OR builder on the list; the duplicate count and merge view; choosing the owner; making a custom field inline in Import; a company's threads (`listThreads` has no company filter); nested groups in the FilterBuilder (such filters show as JSON).
+    - Deliverability: the custom ramp plan's schedule editor, a per-mailbox chart beyond sent, replies and hard bounces, and folder detection as its own wizard step (the connection test finds the folders).
+    - Settings: Compliance (footer text, consent defaults and region rules have no API), System (job queue depth, poll runs and worker heartbeat have no API), default autonomy (no workspace setting exists), a QR code for the two-factor key, and changing your own mail preferences without `settings:manage` (`updateUser` needs it; there is no "update me" operation).
+- **End-to-end tests (§19.9):** `apps/web/e2e`, Playwright 1.64.1 with `@axe-core/playwright` 4.14.0, in Chromium: 53 tests in 13 files, about a minute here. CI runs them as a second job on every push and pull request; §19.1 says a smoke set per pull request and the full set nightly, but the full set is quick enough to run each time.
+  - How it runs: `playwright.config.ts` starts `e2e/support/server.ts` as its web server. That creates a database on the server behind `TEST_DATABASE_URL`, migrates it, runs `next start` on the production build with AI, Jev, push, OAuth, system mail and S3 off (set empty, so a `.env.local` can't turn them on), and drops the database when Playwright stops it. Each test seeds its own workspace through `e2e/support/data.ts` (one helper process per worker, taking commands on stdin) and signs its owner up as an invited person does, from an address of its own (`X-Forwarded-For`), so the sign-in throttle (§16) doesn't couple tests. Tests run in parallel and share nothing. `pnpm --filter @catalyst/web test:e2e` builds, then runs them.
+  - *Spec and code differ:* §19.1 and §19.9 run E2E against "the docker-compose stack with GreenMail". There is no compose stack or GreenMail here, and no worker runs, since its schedules would reach real DNS and mail servers. Where a flow needs the outside world or a job, the data helper does that one step with the server's own code: a reply recorded as inbound processing records it (E2E-04, in place of GreenMail and "Check now"), the real DNS check against a scripted resolver (E2E-01's mock resolver), the hourly rollup tripping the bounce breaker over a week of stats (E2E-11), the import job (E2E-02), and `thread.evaluate` after an open (E2E-10).
+  - Coverage of §19.9: E2E-02, -03, -06, -07, -08, -09, -10, -11, -12 and -13 as written. E2E-08's MCP call goes over HTTP with the new key, as `claude mcp add` would, and finds no sending tools; E2E-09 also covers `t`, `r` and Enter. Partly: E2E-01 (the new domain's checks pass against the scripted resolver, except DKIM, a warning until a mailbox names the provider and so the selector; the wizard's connection test runs against `.invalid` hosts and fails as it should, as there is no mail server to pass it); E2E-04 (the helper records the reply; the card then moves on the open Board through the live stream, and the reply is announced); E2E-05 (with AI off, "Draft reply with this answer" answers 503 `ai_unavailable` with the request ID; the person then replies from the composer and marks the escalation done; the redrafted reply and the knowledge item from the answer need Claude); E2E-14 (in the builder, a step added to the Responded sequence, Sent shown as used by the no-reply sequence, and a preview for a contact in the campaign; in a thread, Skip, Stop and Resume follow-ups). Not built: §19.9's visual snapshots in light and dark mode. Screenshots differ by OS and font rendering, so their baselines would have to be made on the CI image.
+  - Beyond §19.9: signing in and out, a wrong password, an uninvited address; the shell, its shortcuts and ⌘K; a viewer's read-only view; two-factor set-up and sign-in with a computed code, and the owner rule; the Inbox's views and filters, and filing unmatched mail; the Thread view's actions (edit, approve, reject, regenerate's error, take over, assign, goals by hand, close, a missing thread's error); Knowledge with "Test the agent"'s error; lists, segments and companies; a reply appearing in an open thread; twenty views at 390 px; and axe-core on every view in light and dark mode, besides the pages each flow passes through.
+  - What it found, all fixed: `getDomainRamp` broke its own contract for a domain without a mailbox, which is how every domain starts. Every step's cap is then 0, but the schema demanded at least 1, so the Ramp card showed "Internal error". The response now allows 0; input schedules still need at least 1, and a server test covers it. ⌘K showed the previous search's results while the next one ran, so Enter could open a stale one. Needs you scrolled sideways on a phone when an item's title was long, and the Inbox did through screen-reader-only labels in its table. A machine-only open showed nowhere in the Thread view. The Settings forms copied the server's values in an effect, which could overwrite what had just been typed; they now start from the settings once. And the accessibility findings above.
+  - *Spec silent:* what an E2E run may reach. Nothing in the suite is billed or calls a model; the only traffic leaving the machine is the mailbox wizard's connection test looking up its `.invalid` hosts.
+  - **To confirm:** Better Auth takes the client's address from `X-Forwarded-For` only. With no proxy in front (as `next start` runs in the suite) every sign-in shares one throttle bucket, so five tries a minute hold for everyone together. Behind a proxy that sets the header the limit is per address, but a client can send the header itself unless `advanced.ipAddress.trustedProxies` names the proxy. The deployment (§17) should set it.
+- **API keys (§13.2, §13.4):** `listApiKeys`, `createApiKey` (the secret is returned once) and `revokeApiKey` are for an owner or admin in a session, and audited. An API key gets 403, as a key can't manage keys. To start a deployment, `pnpm --filter @catalyst/server catalyst` creates a workspace with its owner (`workspace`), makes a key with given scopes or all of them (`api-key`), and revokes one (`revoke-api-key`), audited as the system.
+    - *Spec and code differ:* §13.4 marks `listApiKeys` as an MCP tool (no †) but session-only. MCP clients sign in with a key, so it can't be one; it is left out of MCP like the other two.
+    - *Spec silent:* how the first workspace and key come about. The CLI does it.
+- **Retention (§6.11):** `maintenance.retention` (daily, 03:30 UTC) deletes raw MIME and attachment files after 18 months, keeping the parsed text, and the attachment rows with them. It deletes tracking events after 13 months, since their counts stay in the daily stats and on the messages, and empties `ai_runs.output` after 6 months, keeping the metrics. It also deletes stored idempotent responses after 24 hours (§13.3) and rate-limit windows after an hour. Each kind goes in batches of 1,000, up to 50 a run, and a failed storage delete is retried the next day.
+    - Not built: the 30-day digest store for unmatched mail from unknown senders (§6.11, §7.4). Such mail isn't stored at all, and the IMAP UID marks what was read.
+- **Inbound integration events (§13.7):**
+  - `receiveStripeWebhook` (`checkout.session.completed`, `invoice.paid`), `receiveCalcomWebhook` (`BOOKING_CREATED`), `receiveCalendlyWebhook` (`invitee.created`) and the generic `ingestIntegrationEvent`, each verifying its sender's signature on the exact body (Stripe, Calendly and generic: `t=…,v1=…` within 5 minutes; Cal.com: HMAC of the body), stored once per `(source, external_id)`.
+  - Matching per §13.7: the contact by email, their threads whose campaign has a goal with a matching `external_event_match` (one `{source, type}` or a list) or `goal_key`, the most recently active one; the achievement is `external_event`, confidence 1, with the booking's start as `event_at`. Lower goals are implied and the lifecycle moves, through the same code as `markGoalAchieved`. IT-14 passes, including the signed `thread.goal_achieved` webhook.
+  - Management: `listIntegrations`, `createIntegration`, `deleteIntegration`, `listIntegrationEvents` (filter by outcome) and `attachIntegrationEvent` for unmatched ones.
+- **Analytics (§15.4):** `getFunnel` (one campaign, or all with goals grouped by key; optionally only threads first emailed in the last N days) and `getDashboardOverview` (what needs a person, today's sends against the plan, the reply rate against the period before with a daily line, goals reached and their value, each live campaign's funnel, deliverability at a glance, recent activity). `weekly_pipeline_review` is now offered over MCP. `listKnowledgeGaps` (§11.3) lists the questions in `knowledge_gap` escalations, most asked first, with how many of those escalations are still open, whether any was answered into the knowledge base (`answerEscalation`), when it was last asked and the latest five escalation IDs; it filters by campaign and by the last N days. *Spec silent:* §11.3 says "the most common questions" without saying when two are the same. Catalyst groups questions whose text matches once case, spacing and punctuation are ignored ("Do you support SAML SSO?" and "do you support SAML-SSO" are one), shows the newest wording, and counts an escalation once per question. Grouping by meaning (embeddings or a Claude call) isn't done.
+- **Knowledge base (§15.17):** `listKnowledgeItems` (filter by scope, kind, source, active, text), `createKnowledgeItem`, `getKnowledgeItem`, `updateKnowledgeItem` (If-Match), `deleteKnowledgeItem` (soft). Not built: `testKnowledge`, `answerEscalation` (both need the AI agent).
+- **Settings (§15.18):** `getWorkspaceSettings` and `updateWorkspaceSettings` for the name, physical address, timezone, business hours, the Slack incoming webhook (write-only, SSRF-checked, stored sealed) and quiet hours. Escalation SLAs and their breaches count in the workspace's business hours. Not built: the AI and compliance sections.
+- **Team:** `listUsers`, `inviteUser` (queues an invitation mail; someone removed earlier comes back), `updateUser` (role, timezone, mail preferences; the last owner can't be demoted), `removeUser` (deactivates; their assignments and ownerships go back to the workspace, and their session stops working at once).
+- **Sign-in (§13.2, §16):** Better Auth 1.7.14 with email and password, at `/api/auth/*` (sign-up, sign-in, sign-out, session), on when `BETTER_AUTH_SECRET` and `APP_URL` are set. Its tables are `auth_users`, `auth_sessions`, `auth_accounts`, `auth_verifications` and `auth_rate_limits` (migration `0012_auth`, §6). Passwords are at least 12 characters and hashed by the library. Sessions last 7 days, refreshed daily, in an HTTP-only, SameSite=Lax cookie (`catalyst.session_token`), Secure when `APP_URL` is https. The API accepts the cookie wherever it accepts a key: the session maps to the active `users` row with the same email, and the role gives the scopes. Each login updates `last_login_at` and is audited (`user.login`). Sign-in and sign-up are limited to 5 a minute per address, kept in Postgres. Tested end to end: invite-only sign-up, wrong and forged credentials, role scopes, the cross-site refusal, a removed person, the login throttle.
+    - *Spec silent:* who may make an account. Only someone already invited (a `users` row). Anyone else's sign-up is refused, so there is no open registration.
+    - *Spec silent:* how roles become scopes (§16 lists roles, §13.2 scopes). Owners and admins get every scope. Members get everything except `settings:manage`, `webhooks:manage`, `mailboxes:write` and `contacts:erase`. Viewers get the `:read` scopes.
+    - *Spec and code differ:* §16 says "CSRF tokens on cookie-authenticated mutations". The API checks the `Origin` header instead, which must be the app's own (or `Sec-Fetch-Site: same-origin` when there is no Origin). A cookie-authenticated change from anywhere else is refused with 403, and SameSite=Lax already keeps the cookie off most cross-site requests. Better Auth's own routes do the same check. **To confirm:** whether tokens are still wanted.
+    - Better Auth pulls in Kysely, an optional peer of `drizzle-orm`. `kysely` is therefore a direct dependency of every package that uses `drizzle-orm`, so they all resolve the same copy (two copies break the types).
+    - Password reset: `/api/auth/request-password-reset` mails a one-hour link through the system SMTP (`SYSTEM_SMTP_URL`, `SYSTEM_FROM`), and `/api/auth/reset-password` sets the new password. A reset signs the person out everywhere and is audited (`user.password_reset`). An unknown address gets the same answer and no mail.
+    - Two-factor sign-in (§16): Better Auth's TOTP plugin (`auth_two_factors`, `auth_users.two_factor_enabled`, migration `0013_two_factor`). A person sets it up with `/api/auth/two-factor/enable` (password) and a first code; after that, sign-in returns `twoFactorRedirect` and the session comes only with `/api/auth/two-factor/verify-totp`, or a backup code. `updateWorkspaceSettings` takes `security.require_owner_two_factor`. While it is on, an owner without two-factor gets 403 `two_factor_required` from every operation except `getCurrentPrincipal`, which says `two_factor_required: true`, until they set it up. Tested end to end with codes computed as an authenticator app would (RFC 6238).
+    - *Spec silent:* the name of the workspace setting and the new problem code `two_factor_required` (§22.D).
+    - Not built: email verification.
+- **Mailbox OAuth (§7.1):** `GET /api/v1/oauth/{google|microsoft}/start?email=…&display_name=…` (session only, `mailboxes:write`) sends an admin to the provider's consent page. Google gets `https://mail.google.com/` with offline access; Microsoft 365 gets `SMTP.Send`, `IMAP.AccessAsUser.All` and `offline_access`, plus `openid email`. A signed, 10-minute `state` binds the request to that person and address, and PKCE (S256) keeps its verifier in a short-lived HttpOnly cookie. The callback exchanges the code, checks the ID token's address is the mailbox's own, and seals the refresh token in `credentials_enc` (§16). It then adds the mailbox (provider presets, §22.B defaults) or reconnects an existing one, pending the connection test (audited). It returns to `APP_URL/deliverability/mailboxes/{id}?connected=1`, or with `oauth_error=…`. Before every SMTP and IMAP sign-in (send, poll, Sent copy, reconcile, connection test) an access token with under a minute left is refreshed and kept, with a rotated refresh token if one comes. `invalid_grant` puts the mailbox in error, asking for a reconnect. Clients come from `GOOGLE_OAUTH_CLIENT_ID`/`SECRET` and `MICROSOFT_OAUTH_CLIENT_ID`/`SECRET`. Tested against a stand-in token endpoint: the redirect, the code exchange with PKCE, a wrong account, a forged state, API keys refused, refresh and `invalid_grant`.
+    - *Spec silent:* how the routes answer. They redirect, so they aren't contract operations; `route-coverage.test.ts` lists them as the two routes outside the contract. Microsoft uses the `organizations` endpoint, so work accounts only, as §7.1's Microsoft 365.
+- **Notifications (§11.2):** `notify.dispatch` (every minute) reads the activity log like the webhook dispatcher: urgent and high escalations, SLA breaches, breaker trips, failing polls and disabled webhook endpoints become a `notifications` row per recipient (the escalation's assignee, else the owners and admins) and channel, mailed through `SYSTEM_SMTP_URL` and posted to Slack. High priority waits out quiet hours; urgent doesn't. `notify.digest` sends each owner, admin and member who wants it one digest a day after 08:00 their workspace time: what is waiting and yesterday's numbers. Mail carries a short summary and a link, never the contact's words. IT-15's "notification created" holds.
+  - Browser push: with `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` and `VAPID_SUBJECT` set (`catalyst vapid-keys` makes a pair; the app checks the pair at start), each recipient of an urgent or high alert also gets a `push` notification. It goes to every browser they subscribed through `createPushSubscription`, after quiet hours as for mail. The payload is a title, the summary, the link and the priority, encrypted for the browser (RFC 8291, aes128gcm) and signed with VAPID (RFC 8292), written on `node:crypto`. A push service's 404 or 410 means the browser unsubscribed, and its subscription is deleted. `getPushSettings` gives the public key for `pushManager.subscribe` and the person's browsers; `deletePushSubscription` removes one. These three are session-only and not MCP tools. The tests decrypt what a stand-in push service receives and verify the VAPID signature. Migration `0014_push` (`push_subscriptions`, ID prefix `psb`, channel `push`).
+    - *Spec silent:* who gets push. The alert's recipients who subscribed a browser, whatever their mail preference, since push is a separate choice made in the browser.
+    - The browser side is the service worker in `apps/web/public/sw.js`, subscribed from Settings → Notifications (see UI). Not yet tried against a real push service.
+- **The AI agent (§10), first part:**
+  - `packages/ai`: the §10.5 `InboundAnalysis` and §10.6 `ReplyDraft` schemas, versioned prompts (`prompts/system.v1.md`, `analyze_inbound.v1.md`, `draft_reply.v1.md`), context assembly in the §10.3 order with its exclusions (shareable knowledge only, no addresses but the sender's, emails escaped inside `<email>` tags), the §10.9 guardrails (links, recipients, numbers, prohibited commitments, honesty, leaks by 7-word runs, format), and the Claude client: `client.beta.messages.parse` with a zod output format, per-task effort, server-side refusal fallbacks (`fallbacks: "default"`), cache breakpoints after the system and campaign blocks, one retry on invalid output, tokens and cost per run.
+  - `ai.process_inbound` (queued by ingest for a human reply on a built-in-agent thread when AI is on): Claude reads the reply, `decideInbound` decides, Catalyst unsubscribes, postpones for an out-of-office (to the next business day after the return date), raises escalations (knowledge gaps with their questions, goal confirmations, closing or check-in proposals), then Claude drafts; a draft failing the guardrails is revised once and then escalated with the draft attached; `decideSend` applies the autonomy rules; the draft is stored as the composer would build it (signature, footer, threading, lint) and scheduled after the reply delay or left for approval. Every call is an `ai_runs` row with tokens, cost, status and decision. The per-thread cap of 20 runs a day holds.
+  - `answerEscalation` drafts the reply again with the operator's answer, then (only once the draft worked) saves the answer as a knowledge item (`source = escalation`) and resolves the escalation (`answered_for_ai`). `generateAiDraft` drafts on any thread with optional guidance. Both drafts wait for approval, and both answer 503 `ai_unavailable` when the agent is off or fails, changing nothing.
+  - AI-mode steps: with AI on, the composer hands an `ai_opening_line`, `ai_adapt` or `ai_write` step to `ai.compose` (holding the thread 10 minutes so the next tick doesn't ask twice). The job runs `personalize` (an opening line, or the whole first email for an initial `ai_write`) or `draft_follow_up` (§5.10's brief and guidance), the guardrails with one revision, and `decideSend` (`ai_personalized`: the first `review_first_n_personalized` are reviewed; `ai_follow_up`: by the contact's last classification, which is the fallback's while Jev is off). The composer then builds and stores it like any step, with the variant the agent wrote from.
+  - Verified only with a scripted Claude stand-in: no request reached the Claude API.
+  - `reclassifyThread` reads the conversation again and stores the classification without acting; `listThreadClassifications` shows Claude's analyses while Jev is off. `testKnowledge` asks the agent a question against shareable knowledge only, and counts an answer that cites no item as a gap.
+  - The monthly AI budget (§10.2): `updateWorkspaceSettings` takes `ai.monthly_budget_usd` (positive, or null for no cap), and `getWorkspaceSettings` shows it with the month's spend, the share used and a level (`unlimited`, `ok`, `warning`, `exhausted`) for the UI's banner. Spend is the sum of `ai_runs.cost_usd_micros` since the 1st of the month. The first run in a month that takes spend past 80%, then past 100%, writes `ai.budget_warning` or `ai.budget_exhausted`, and the dispatcher mails it (high priority) to the owners and admins and posts it to Slack. Once spent: `ai.process_inbound` and `ai.compose` raise an `ai_unavailable` escalation without calling the model, and `answerEscalation`, `generateAiDraft`, `reclassifyThread` and `testKnowledge` answer 503 `budget_exceeded`. Raising the budget restarts the agent at once and resets the month's alerts. `testKnowledge` now records its run, with no thread, so its cost counts. New indexes `ai_runs (workspace_id, created_at)` and `ai_runs (thread_id, created_at)` serve the spend total and the per-thread cap (migration `0007_ai_runs_indexes`).
+    - *Spec silent:* which month. It is the calendar month in the workspace's timezone.
+    - *Spec silent:* the status code. 503 with code `budget_exceeded` (§22.D), the same status as `ai_unavailable`.
+    - *Spec silent:* a run in progress when the budget runs out finishes, so a reply that was being drafted still gets its draft. Only work that starts afterwards stops. Spend can therefore go a little over the budget.
+    - *Spec and code differ:* §10.2 says threads needing replies "go to `pending_approval` without a draft". `pending_approval` is a message status, and a thread can't hold it without a message. Catalyst raises an `ai_unavailable` escalation instead, which the §11.1 table already lists for "budget", so the thread shows as `needs_human` in the queue. The §10.2 wording should change to match, or say what the thread's state should be.
+  - Rolling summaries (§10.1 `summarize`, effort `low`): once Claude has read a human reply (not an auto-reply, and not a reply that unsubscribed), `ai.process_inbound` queues `ai.summarize` for the thread, one at a time per thread. Claude gets the usual context, including the summary so far, and writes 2–4 sentences about the whole conversation; it replaces `threads.ai_summary` unless a newer one was written meanwhile. The analysis' one-reply summary is now only a thread's first summary. A summary containing the campaign's canary token is discarded (run `guardrail_blocked`). Summaries count toward the per-thread cap and the budget; when either is reached the summary is skipped, not escalated, since nothing is sent from it.
+  - Not-now check-ins (§5.10 rule 5): `threads.check_in_at` replaces the stage's sequence with one check-in. Evaluation makes it the next action (`send_follow_up`, no sequence or step) on that date, after any out-of-office. A human reply after it was set cancels it; our own replies don't, so "Sure, I'll check back in March" can go first. `stopFollowUps` holds it. When it is due, the composer hands it to `ai.check_in`. The agent writes it with `draft_follow_up` and stores it like a reply (threading, signature, footer, no step). The autonomy rules for an AI follow-up decide whether it sends; while Jev is off, it waits for approval, because the contact has replied. Writing it clears the check-in. Once it is sent, it is the newest exchange, so the stage's sequence restarts at step 1 from it. With AI off, a due check-in raises an `ai_unavailable` escalation. Jev's `schedule` band sets the check-in itself. In the fallback, the agent only proposes it: the `low_confidence` escalation names the date Claude found, and a person calls `scheduleCheckIn`, which the work queue now suggests. `cancelCheckIn` lets the sequence take over from now. Migration `0008_check_ins`.
+    - *Spec silent:* the API. §13.4 has no operation for setting a check-in date; `scheduleCheckIn` and `cancelCheckIn` are added. The date is a day in the contact's timezone, after today and at most a year ahead. It means the start of that day, fitted into the sending window.
+    - *Spec silent:* rejecting a check-in. It counts as skipping it, like a rejected follow-up step, so the stage's sequence takes over from then.
+    - *Spec silent:* a check-in is stored as a reply, so it uses reply capacity and counts toward `max_ai_replies_per_thread`.
+  - Per-task models (§10.2, Settings → AI): `updateWorkspaceSettings` takes `ai.tasks`, a model and/or effort per Claude task, with null putting a task back on the default. `getWorkspaceSettings` lists every task's model and effort and whether the workspace overrides it. Every agent run, automatic or on request, uses the workspace's settings. *Spec silent:* which models are allowed. Only models whose prices Catalyst knows (`claude-opus-5-5`, `claude-sonnet-5-5`, `claude-haiku-5-5`) can be chosen, since any other model's runs would cost nothing against the budget.
+  - AI disclosure (§10.9): `ai.disclosure` (`none`, the default, or `signature_line`) in the workspace settings. With `signature_line`, "Written with help from an AI assistant." goes under the signature of every email the agent wrote in whole or in part: drafted replies, check-ins, AI follow-ups, and first emails with an AI opening line. A person's own email gets nothing. *Spec silent:* the wording, which is the line above.
+  - Spend and run health (Settings → AI): `getAiUsage` reports the last N days' runs by day (in the workspace timezone), by task (cost, failures, guardrail blocks, median latency) and by model, with tokens, the month's budget, the classification fallback rate and the Jev/Claude disagreement rate. *Spec silent:* the API, so the operation is added (§13.4).
+  - Jev (§10.4): `packages/ai/src/jev.ts` holds classifier `conversation.v1`, with §22.F's wording verbatim (`kind`, `needs_reply`, `intent`, `sentiment`, `temperature`, `unsubscribe`, `goal_<key>`, the seven `esc_<reason>` and `suspicious`). After an outbound message only the whole-conversation questions are asked. The client calls `@typesafe-ai/sdk` 0.7.0 (`TypeSafeClient.systemOne`, written from its type definitions) with a 5 s timeout and one retry. Every answer is checked against our schema of Jev's response; a mismatch is `invalid_output`, and Claude classifies alone. The state is §10.4's: this thread's latest 20 messages, stripped, with no addresses, tracking or internal knowledge. Each call is an `ai_runs` row (`provider = typesafe`, `task = classify_conversation`, the model it reports, `conversation.v1`), costed at $0.042 per million input tokens against the budget. In `ai.process_inbound` Jev runs first. Claude's `analyze_inbound` follows unless Jev settled the message alone: a clear unsubscribe, a clear automatic reply, or no reply needed with nothing raised. An out-of-office still goes to Claude for its return date. `decideInbound` then combines both. Jev's answers set the thread's intent and probability, sentiment, temperature and `classification_fallback = false`, and the reply's `needs_reply_p`, so evaluation knows the conversation is waiting on the contact. A goal Jev is sure of (at or above the campaign threshold, with the goal set to auto-confirm, Claude not denying it) is recorded with `method = ai`. A no both models agree on closes the thread as `not_interested` and tags the contact. Disagreements are logged on Jev's run (`decision = disagree:…`). The model must be pinned (`jev-X.Y.Z`); `jev-latest` or nothing leaves Jev off with a warning. Verified only with a scripted Jev; no request reached TypeSafe.
+    - Fixed: nothing ever set `threads.classification_fallback`, so the API showed `fallback: false` while every classification was Claude's alone. A Claude-only classification now sets it.
+    - *Spec silent:* how Jev's 5-level sentiment score becomes the thread's three labels. Below 1.5 is negative, 1.5 to 2.5 neutral, above 2.5 positive.
+    - After a person's own email, sent through Catalyst or found in the Sent folder, `ai.classify_outbound` asks Jev the whole-conversation questions. Only goals act on the answer (`decideAfterOutbound`): recorded when sure and allowed to auto-confirm, otherwise a `goal_confirmation` escalation. Without Jev it does nothing. `reclassifyThread` goes through Jev when it is set up, and Claude otherwise.
+    - A goal created, changed, deleted or reordered queues `ai.reclassify_campaign` (with Jev set up). The job reads again each open thread of the campaign where the contact has replied, at most 500 a run, within the budget and the per-thread cap, and acts on goals as above.
+    - External agent mode (§10.7): with AI on, each reply on an external campaign queues `ai.classify_inbound`. Jev classifies it and stores the result (thread fields, `needs_reply_p`), so the harness sees it; nothing is drafted or acted on.
+    - Settings → AI for Jev: `updateWorkspaceSettings` takes `ai.jev_model` (a workspace pin over the deployment's `TYPESAFE_MODEL`, `jev-X.Y.Z` only) and `ai.thresholds` (overrides of §22.B's 13 thresholds, null back to the defaults, stamped `thresholds_updated_at`). `getWorkspaceSettings` shows the model in force, where its pin comes from, and every threshold. The guardrails (`thresholdProblems` in core): each is a probability; each ask band stays below its act band; mandatory escalations can't be made harder to raise than 0.5, since they can't be switched off (§10.7). Every Jev decision (inbound, after our email, campaign reclassification, `reclassifyThread`) uses the workspace's pin and thresholds. `getAiUsage` reports the real fallback rate (replies read without a Jev answer) and the Jev/Claude disagreement rate over its period.
+    - *Spec silent:* "the last calibration date" (§15.18) needs the eval suite, which isn't built. `thresholds_updated_at` records when a person last changed them.
+  - Not built: the eval suite (§19.7), which runs the models and so isn't run here. External agent mode's work items: see Work queue.
+- **MCP (§14):** one tool per operation, filtered by scope and `?toolsets=`, served stateless over Streamable HTTP at `/api/mcp`. Prompts and resource templates appear once the tools they need exist; `triage_attention_queue` is now offered. A snapshot of the tool list is checked in.
+- **Work queue (§14.5):** `getWorkQueue` lists open escalations, emails waiting for approval and saved drafts, unmatched replies, and mailboxes in error or paused by a breaker, with `why`, `suggested_tools` and totals by kind.
+  - External agent mode (§10.7): the built-in agent now writes nothing for an `external` campaign. Before, AI-mode steps and check-ins still went to Claude. A due AI-mode step or check-in waits for the campaign's own agent (`throttle_reason = awaiting_agent`, looked at again hourly). The queue lists `reply_needed` (a contact replied and nothing answers it yet) and `follow_up_needed` (an AI follow-up or check-in is due), until a draft exists. A reply written with `createReply` while a step awaits the agent is recorded as that step (or as the check-in), so the sequence moves on as if the composer had written it.
+    - *Spec silent:* how a harness submits a draft. It uses `createReply`, like a person. The "analyze" item of §10.7 is `reply_needed`: the harness reads the thread with `getThreadContext`.
+    - *Spec and code differ:* §10.7 says drafts the harness submits go through the same guardrails and autonomy rules. `createReply` runs the lint and the pre-send guard (§7.2), but not the §10.9 guardrails or the §10.7 autonomy rules. A harness's email is either a draft for a person or sent on its caller's say-so (`send_now`, which needs `messages:send`). **To confirm:** whether harness drafts should be checked like the agent's, and what their confidence would be.
+- **Job queue (D7):**
+  - pg-boss with the job catalog in `packages/jobs`; jobs are enqueued inside the caller's transaction.
+  - `apps/worker/src/main.ts` runs `thread.evaluate`, `contact.verify`, `import.process`, `scheduler.tick`, `outbound.send`, `delivery.confirm`, `outbound.sweep`, `outbound.reconcile`, `outbound.append_sent`, `mail.poll` and `mail.poll.all`, queues catch-up polls on start, and drains on SIGTERM.
+  - The API enqueues `thread.evaluate` whenever a contact, suppression or campaign change can move a thread.
+- **Packages:**
+  - `packages/server` holds the API runtime and services, moved out of `apps/web` so the worker shares them.
+  - Also `packages/mcp`, `packages/jobs` and `packages/storage`: filesystem, in-memory, and S3 or MinIO through `@aws-sdk/client-s3` (chosen by `S3_BUCKET`, with `S3_ENDPOINT` for MinIO). The S3 adapter is tested by driving the real SDK against an in-process S3 stand-in: signed requests, content types, a missing key mapped to `ObjectNotFound`, idempotent deletes.
+- **Contract:** 193 operations.
+- **Tests:** 580 pass against PostgreSQL 15.12 (core 180, email 83, contract 22, db 13, ai 7, mcp 8, jobs 4, storage 6, server 251, worker 4, web 2). The end-to-end suite's 53 pass against the same server (see End-to-end tests).
+- **Running processes:**
+  - `next build` succeeds.
+  - `next start` and the worker were run against a fresh database. A contact created over HTTP was verified by the worker with live DNS, MCP `initialize`, `tools/list` and `tools/call` answered over HTTP, and SIGTERM drained the worker.
+
+**Schema changes (§6)**
+
+- `imports.headers`, `imports.options` and `imports.processed_rows` (migration `0002_import_progress`).
+- `campaign_steps` position check relaxed to `position >= 1` (migration `0003_step_reorder`). The 1–6 rule is enforced on save, and steps pass through higher positions while being reordered.
+- `activities.created_at` with an index on `(workspace_id, created_at)`, and `unique (endpoint_id, event_id)` on `webhook_deliveries` (migration `0005_webhook_dispatch`). `occurred_at` can be a business time (a booking's start), so the webhook dispatcher reads the insert time instead; the unique key makes each event one delivery per endpoint.
+- `users.deactivated_at` and a `notifications` table (migration `0006_notifications`, ID prefix `ntf`): §11.2 says what is sent but not where it is recorded, and IT-15 expects a notification to exist. `unique nulls not distinct (activity_id, user_id, channel)` sends each event once per person and channel; digests use `digest:YYYY-MM-DD` as their key.
+- `messages.ignored_at` (migration `0004_unmatched_ignore`): when a person ignored an unmatched email. The spec names `ignoreUnmatchedMessage` but not how it is recorded; the email is kept rather than deleted.
+- Indexes `ai_runs (workspace_id, created_at)` and `ai_runs (thread_id, created_at)` (migration `0007_ai_runs_indexes`), for the month's AI spend and the per-thread cap. The notification kind `ai_budget`.
+- `threads.check_in_at` and `threads.check_in_set_at` (migration `0008_check_ins`): the check-in a contact asked for, and when it was set, since a later reply cancels it. §5.10 rule 5 says what a check-in does but not where it is kept.
+- `rate_limit_windows` (migration `0011_rate_limits`): §13.3's limits need a count every app process shares.
+- A trigger on `activities` that NOTIFYs `catalyst_activity` (migration `0010_activity_notify`), for SSE. §4.2 names LISTEN/NOTIFY; this is where it comes from.
+- `sending_domains.postmaster_credentials_enc` and `postmaster_credentials_key_version` (migration `0015_postmaster`): the Google refresh token for Postmaster Tools, sealed.
+- `sending_domains.first_touches_paused_at` and `first_touches_paused_reason` (migration `0009_auth_breaker`): the §8.9 authentication breaker. The throttle reason `domain_auth` is added to the `threads.throttle_reason` and `capacity_plans.limited_by` values.
+
+**Additions to §13.4 and §22.C**
+
+- Operation `previewImport` (`POST /imports/{importId}/preview`): the dry run of §12.3.
+- Activity types `campaign.created`, `campaign.resumed`, `campaign.archived`, `domain.ramp_resumed`, `thread.paused`, `thread.resumed`, `thread.closed`, `thread.stage_floor_set`, `contact.unsubscribe_undone`, `deliverability.breaker_tripped`, `mailbox.connection_tested`, `mailbox.poll_failed`, `message.send_retried` `deliverability.junk_reply`, `ai.budget_warning`, `ai.budget_exhausted`, `follow_up.check_in_scheduled`, `follow_up.check_in_cancelled`, `domain.first_touches_resumed`, `domain.postmaster_disconnected`, `mailbox.health_changed` and `user.removed`. `mailbox.paused` and `mailbox.resumed` are also written for manual pauses. (§22.C itself lacked several of these until the UI's activity words were checked against the code; it now lists them all.)
+- `Domain.alignment_status` (`aligned`, `not_aligned`, `unknown`) in the API, and those values in the §6 column comment.
+- Jobs in §4.4: `mail.poll.all`, `outbound.sweep`, `outbound.reconcile`, `outbound.append_sent`, `ai.process_inbound`, `ai.compose`, `ai.check_in`, `ai.classify_inbound`, `ai.classify_outbound`, `ai.reclassify_campaign` and `maintenance.retention` (`ai.summarize` is §4.4's own). §4.4 names `ai.classify_conversation`, `ai.analyze_inbound`, `ai.draft_reply` and others as separate jobs; one job per trigger runs the steps in order instead, since each depends on the one before.
+- Operations `listIntegrations`, `createIntegration`, `deleteIntegration`, `listIntegrationEvents` and `attachIntegrationEvent` (§13.4 names only the receiving endpoints; §15 Settings → Integrations needs these), and the provider endpoints as operations `receiveStripeWebhook`, `receiveCalcomWebhook` and `receiveCalendlyWebhook` (marked † there: not MCP tools).
+- `Message` gains `match_method`, `lint` (the linter's findings), `approved_at` and `updated_at` (so a draft has an ETag for `updateDraft`). `listPendingDrafts` filters by `campaign_id`, `thread_id` and `status`. `lintMessage` takes `subject`, `body_text`, `first_touch` and `compliance_required`.
+
+**Decisions made where the spec is silent (to confirm)**
+
+- **Contacts and suppressions**
+  - A suppressed or do-not-contact contact puts its threads in `stopped` (reason `suppressed` / `do_not_contact`), ranked below `unsubscribed` and `bounced`. Lifting the block resumes them.
+  - The suppression hash is unsalted SHA-256 of the trimmed, lower-cased address, so it survives erasure.
+  - `updateContact` merges `custom_fields` key by key (null removes a key). Keys without a definition are kept unchecked. A required custom field must be given on create and can't be cleared.
+  - Free-mail domains never link contacts to a company. Deleting a company unlinks its contacts.
+  - `mergeContacts` refuses when both contacts have a thread in the same campaign. Opt-outs and do-not-contact from either record win; the further lifecycle stage is kept.
+  - Erasure keeps the row and threads as "Erased contact": message bodies are nulled, subjects become "(erased)", notes and message activity data are cleared.
+- **Bulk operations and imports**
+  - Bulk actions take at most 1,000 IDs or 5,000 filter matches and run synchronously. CSV export escapes leading `= + - @`.
+  - Bulk upsert validates every row before writing anything; tags are only added.
+  - Imports take CSV text in a JSON body (20 MB, 50,000 rows); XLSX is not supported yet.
+  - Suppressed and repeated rows are skipped and counted. `company` matches by name and creates missing companies; `tags` creates missing tags.
+  - `commitImport` returns 202 with the import as its job resource; `getJob` reports on imports (`imp_…`) and mailbox polls (`prn_…`) with one shape: `queued`, `running`, `succeeded` or `failed`, and progress.
+- **Domains and mailboxes**
+  - A mailbox needs its domain added first. `createMailbox` takes a password; Google and Microsoft mailboxes can instead be connected with OAuth (see Mailbox OAuth).
+  - A mailbox with threads or messages can't be deleted, only paused.
+  - A new password sends the mailbox back to `pending` until the connection test passes.
+  - A breaker pause is marked by a `status_reason` starting `breaker:`, and resuming needs `acknowledge_cause: true`.
+  - §8.3.6 says every mailbox cap or warm-up change needs an admin and a reason; the API requires `settings:manage` only above 150 a day (§8.3.4) and audits every limit change without a reason.
+  - The ramp ceiling counts active and pending mailboxes. The tracking host must be on the sending domain.
+- **Threads and sending**
+  - Thread changes through the API evaluate the thread right after committing, instead of only queueing evaluation.
+  - `rescheduleNextAction` only postpones; sending sooner is `sendNextActionNow`.
+  - `revokeGoalAchievement` takes its reason as a query parameter, because DELETE has no body.
+  - Unsubscribe tokens sign `unsub:` plus the message ID, so a leaked pixel URL can't unsubscribe anyone. Undo only lifts suppressions from the link or one-click.
+  - Open tracking needs the sending domain's own tracking host (§9.1); without one, no pixel is added and links fall back to the app's host. Click tracking needs it too; without one, links are left as they are.
+  - With click tracking, only the HTML part's link targets are rewritten. §9.3 says links are rewritten; keeping the plain-text URLs readable is a choice made here.
+  - An AI-mode step that falls due raises `ai_unavailable` when AI is off (`AI_ENABLED` unset); with it on, the agent writes it.
+  - Composing an email claims the thread's next action straight away, so the next tick can't compose it twice.
+  - Capacity is planned live on every tick from current rows, not read from `capacity_plans`, which the hourly rollup writes as a record. So a band change, breaker trip, mailbox change or override takes effect at the next tick, which is what §8.3's "recompute the plan" asks for.
+  - `capacity.plan` and `mailbox.stats_rollup` run hourly (at :05 and :20). §4.4 says 00:05 in each workspace's zone; one hourly job that acts once per workspace day covers every zone with one schedule.
+  - A ramp hold is logged when it starts or its reason changes, not every day. Warm-up holds are logged daily, since they name the mailbox's band that day.
+  - The idle count for the ramp starts at the last sending day; a domain that has never sent is not idle.
+  - Breakers that only warn create no activity yet, so the hourly rollup doesn't repeat them.
+  - The capacity projection counts the follow-ups already due on each future day, and beyond 7 days a campaign's finish date assumes its last projected pace holds (for at most a year; null when the pace is zero). "Used" counts emails composed for today as well as sent ones, as the scheduler does.
+  - A blocklist answer that only says the query was refused (Spamhaus 127.255.255.x from a public resolver, 127.0.0.1 from SURBL or URIBL) counts as unknown, not listed.
+  - The overview's "main limit" is the limit of the campaign with the largest allocation, else of the busiest mailbox.
+  - A mailbox paused for a provider quota is marked with a `breaker:` reason. Nothing resumes it automatically yet.
+- **Campaigns**
+  - New campaigns get the §5.10 sequences with starter text. Step 2 of the no-reply sequence holds a "[Replace …]" placeholder that preflight refuses to launch with.
+  - Templates may use the §22.A variables plus `contact.full_name`, `contact.city`, `contact.country`, `campaign.name` and `workspace.name`, and the tags `if`/`elsif`/`else`/`unless`.
+  - Template problems are saved and reported (`issues`) rather than refused, so drafts can be saved half-written; preflight blocks them.
+  - A follow-up step not sent as a reply needs its own subject.
+  - Preflight fails on any URL in templates or playbooks that isn't in `campaigns.links`. Its capacity estimate is not built.
+  - Only a draft campaign can be deleted, with its never-sent threads. Resuming a paused campaign sets `follow_ups_not_before` on its threads.
+  - Enrollment skips contacts in an active thread of another active or paused campaign. Unverified addresses are enrolled; the pre-send guard catches invalid ones.
+- **Connection test and polling**
+  - The connection test signs in to IMAP even when SMTP fails, so both problems show at once. Missing Sent or Junk folders are warnings.
+  - The receive step passes when DMARC passes with DKIM aligned. A DMARC `fail` fails the test; no `Authentication-Results` at all, DMARC passing only through SPF, or arriving in Junk are warnings, since the DNS check still guards launch.
+  - A failing test leaves an active mailbox active (the test may have hit a passing outage) and keeps a pending one pending with the failure as its `status_reason`. A paused mailbox stays paused when the test passes.
+  - `pollMailboxNow` refuses a pending mailbox (409 `conflict`) until its connection test passes.
+  - **Disagreement:** §7.3 says each *active* mailbox is polled. Paused mailboxes are polled too, because pausing stops sending, not replies. Mailboxes in `error` are polled only on request.
+  - A failed poll and its two retries count as one run for the "two failed runs in a row" rule; otherwise one transient failure would put the mailbox in error within a minute.
+  - A mailbox put in error by polling returns to active after a successful poll.
+  - **Disagreement:** §4.4 and §7.3 describe an `inbound.process` job per message. Polling ingests each message inline instead, saving `last_seen_uid` after each, so there is one IMAP pass and no second queue hop. The 30-day header digest for unknown senders (§7.4 step 7) is not kept; `last_seen_uid` and Message-ID dedupe stop re-reads.
+  - Without an AI client, mail no rule settles counts as a human reply, and a human reply on a built-in-agent campaign raises `ai_unavailable` so a person answers it.
+- **Writing and sending by hand**
+  - `createReply` with `send_now` outside the sending window answers 422 `outside_window`, as §13.5 says; `schedule` and `approveDraft` move the time into the window instead, so approving at night queues for the morning. **To confirm:** a person pressing "Send now" at 20:00 is refused.
+  - A person's reply, draft or sent, supersedes the AI drafts and composed template emails waiting on the thread; evaluation then times the sequence from the reply.
+  - Sending a reply resolves the thread's open `ai_unavailable` escalations (resolution `replied`).
+  - A reply needs something sent on the thread first (409 otherwise). Bounced and unsubscribed threads take nothing, not even a draft (409 `thread_terminal`). Other non-active states are allowed, because a person's reply counts as approval (§7.2 step 5).
+  - Rejecting or cancelling a step's email counts the step as skipped. For the first email the thread is paused instead, or the scheduler would write it again.
+  - `rejectDraft` logs `feedback`; regenerating a draft needs the AI agent.
+  - `updateDraft` replaces the whole body, signature and footer included, and lints it again; only a non-reply's subject can change. Approval and the tracking pixel are kept.
+  - `sendNextActionNow` composes a due email on the spot, picking a mailbox for a first email by capacity. It refuses AI-written steps (409) and checks the window (422). An email already composed is not checked against capacity again: it was counted when composed.
+  - Replies are capped by the mailbox's reply limit (allocation plus the reply overflow, §8.3.3), counting everything it sent today.
+- **The AI agent**
+  - The canary token is one per campaign (an HMAC of the campaign ID), not random per request: §10.3 puts it in the static system block, and a per-request value there would defeat the prompt cache §10.2 relies on.
+  - The agent is switched on with `AI_ENABLED=true` on the worker; credentials are whatever the Anthropic SDK finds (`ANTHROPIC_API_KEY` or a profile). Without it, a human reply raises `ai_unavailable` as before.
+  - A draft Claude marks `needs_human` can't auto-send; it doesn't raise an escalation of its own. "Close as not interested?" and "check in later?" proposals in the approval band become `low_confidence` escalations, since the thread has no other approval queue for decisions.
+  - A follow-up written by the agent counts its step's template and guidance as campaign facts for the numbers and links checks.
+  - Operations may now declare 503; `answerEscalation` and `generateAiDraft` do.
+  - Every escalation raised while handling a reply gets the draft as `suggested_draft_id` (§10.5: "a draft is still generated as a suggestion").
+  - `latest_intent`, `latest_sentiment` and `ai_summary` are written from Claude's analysis, with `thread.classification_fallback` logged, until Jev provides the classification of record.
+- **Notifications and the team**
+  - Normal-priority escalations aren't mailed one by one; they are in the digest. Warn-level breaker results aren't mailed. An activity no one is told about still gets a `skipped` row, so it isn't looked at again.
+  - Without `SYSTEM_SMTP_URL`, mail rows are `skipped` with that reason rather than dropped. A failed send is kept with its error and not retried, so nobody gets the same alert twice.
+  - Quiet hours are workspace-wide (§15.18 lists them under Notifications); a person's own timezone doesn't move them.
+  - Someone who turned mail off gets no digest either. Removing a person skips their pending mail.
+- **Knowledge and settings**
+  - A knowledge item's `source` is `manual` when a person adds it and `api` for an API key. Deleting is soft, so escalations that taught an item keep their link.
+  - Business hours are stored in `workspaces.settings.business_hours`; without them, Monday to Friday 09:00–17:00 (§11.1).
+- **Analytics**
+  - Stage counts use each thread's milestone times (`first_sent_at`, `received_at`, `responded_at`) and unrevoked goal achievements, implied ones included, so the funnel narrows; the Dashboard's "goals reached" counts only goals reached directly, so a payment isn't also counted as a call.
+  - The reply rate is threads with a human reply divided by threads emailed, each counted once in the period; the previous period is the one just before it.
+  - A goal's value is its `value_cents` times the threads that reached it; amounts from integration events are kept on the event, not added to it.
+- **Integrations**
+  - A provider endpoint names its integration with `?integration_id=` (the §13.4 paths have none, and each workspace has its own secret); the generic one with a `Catalyst-Integration` header. A missing, disconnected or wrong-kind integration answers 404.
+  - For Stripe, Cal.com and Calendly the operator pastes the provider's signing secret; for `generic`, Catalyst makes one and shows it once.
+  - Outcomes: `matched`, `already_achieved`, `no_contact`, `no_goal`, `not_sent` (the fitting thread has no first email yet, so it can't hold a goal) and `ignored` (a type Catalyst doesn't act on). A goal's `detection_methods` is not consulted: §13.7 matches on `external_event_match` or `goal_key` alone.
+  - Disconnecting keeps the integration row, turned off, because its events point at it. `integrations` has no `created_at`, so the API shows none.
+- **Webhooks**
+  - Events are read from activities rather than raised in each service, so every place that logs an activity emits its event. Renamed ones: `goal.achieved` → `thread.goal_achieved`, `message.pending_approval` → `draft.pending_approval`, campaign launch/pause/resume/complete/archive and breaker trips → `campaign.status_changed` (with `status` and `change`), each ramp move, hold, step back, resume, plan change or cap override → `domain.ramp_changed` (with `action`).
+  - The dispatcher waits 15 seconds after an activity is recorded (so its transaction has committed) and looks back 24 hours; events from before an endpoint existed are not sent.
+  - An endpoint counts as failing from its oldest failed delivery since its last success. A delivery due while its endpoint is off is `skipped`; turning the endpoint back on clears its failure count, and `redeliverWebhook` starts a delivery's attempts again.
+  - `testWebhookEndpoint` sends a `webhook.test` event once, without retries.
+- **Work queue**
+  - Priorities: escalations keep theirs; an email waiting for approval is high and a saved draft normal; a mailbox in error is urgent and one paused by a breaker high; unmatched replies are normal. Within a priority, soonest due first, then longest waiting.
+  - Unmatched mail with an open `unmatched_reply` escalation appears once, as the escalation. Snoozed escalations are left out.
+- **Unmatched mail**
+  - Attaching re-decides the author: the thread's contact, or a third party (who becomes a participant, with a `new_participant` escalation). The resolved `unmatched_reply` escalation gets a note naming the thread and no resolution value, since none of §11.3's fits.
+- **Escalations**
+  - `resolveEscalation` records how it was settled; `took_over` acts too, pausing the agent on the thread, and so does `goal_confirmed` on a goal confirmation (below). The other actions of §11.3 are their own operations (createReply, markGoalAchieved, closeThread), and the resolution says which was used.
+  - Goal confirmations name their goal (decided where the spec was silent: §5.2 and §15.5 ask for *Confirm* and *Not yet*, but an escalation didn't say which goal). `escalations.goal_id` and `goal_p` (§6) hold the goal and the classifier's probability; one goal confirmation is open per thread and goal. `goal_confirmed` records the goal as the classifier read it (`method = ai`, that probability, the explanation as evidence, `confirmed_by` the person), unless it is already held; `goal_rejected` records nothing. Deleting a goal clears it from its confirmations.
+  - `agent_mode` (§10.7) can now be set: `createCampaign` and `updateCampaign` take it (decided where the spec was silent; no operation set it, so external agent mode existed only in tests). It changes who writes from the next decision on; threads already waiting for the campaign's own agent are looked at again hourly as before.
+  - Mailbox OAuth now comes back to the mailbox's page, `/deliverability/mailboxes/{id}?connected=1`, and a failure to `/deliverability?oauth_error=…`, which shows it; both pointed at `/settings/mailboxes`, which no view uses.
+  - UI decisions where §15 was silent or the API falls short: goal values show in US dollars, as in §15's wireframes (no currency is specified). The Sending pace card says when a campaign is not in today's plan: only campaigns with threads waiting for a first email are. On the Board, every backward move means revoking the card's highest goal (the stage then falls to the highest remaining fact), so the card menu offers it once; a forward move onto Sent, Received or Responded does nothing, since those follow email evidence (`setThreadStageFloor` sets a floor through the API; no view offers it yet). The Thread view opens as a page (⌘- or Ctrl-click opens a new tab), not a side panel. Messages show their text only, since the API serves no HTML part, so no remote content ever loads and "Load images" has nothing to do. "Regenerate" asks the agent for a new draft with the feedback as guidance and rejects the old one only once the new one exists. "I replied: done" resolves an escalation as `replied`; a person's reply resolves only `ai_unavailable` escalations by itself. The composer lints the text as written; the signature and compliance footer are added and checked when the email is built, so the draft card can show blockers the composer didn't (no unsubscribe link without `TRACKING_SIGNING_SECRET`, for one).
+  - Dismissing sets `resolution = dismissed`, with the reason as the note.
+  - Snoozing moves `due_at` by the time snoozed, which is how the SLA pauses; it is limited to 30 days. A snoozed escalation still holds its thread.
+  - A breach sets a fresh due time from the new priority's SLA, so an untouched escalation is flagged again each period; an urgent one stays urgent.
+- **Sent folder**
+  - A `send_unknown` email that Sent can't settle goes to a person: the provider keeps no copies (`append_to_sent`), there is no Sent folder, IMAP fails, or it was already retried once. It is matched by Message-ID only.
+  - APPEND to Sent runs as its own job after the send commits, and checks Sent for the Message-ID first, so a retried job never saves two copies.
+
+**Not yet verified:** a real S3 or MinIO bucket (only the in-process stand-in), OAuth, and any real provider: SMTP was tested only against an in-process server (smtp-server), and IMAP only against an in-process one (hoodiecrow-imap). Gmail's and Microsoft's own `Authentication-Results` formats are covered by parser tests, not live mail.
+
+#### By milestone
+
+| Milestone | State | Built | Not built |
+|---|---|---|---|
+| **M0 Foundations** | Partly done | pnpm workspace with nine packages and two apps; the schema and migrations; the contract registry and OpenAPI generation; the API runtime; session auth, 2FA and roles (Better Auth); design tokens and the app shell; a CI workflow with the Playwright suite | shadcn/ui components; a lint step; Turborepo; E2E visual snapshots |
+| **M1 Contacts** | Built | Contacts, tags, companies, custom fields, static lists and dynamic segments, suppressions, the timeline and notes, address verification, bulk actions, duplicates and merge, erase and export, search, CSV import; MCP tools for each; the Contacts, Contact, Import, Companies and Lists views (V8–V12); E2E-02 and E2E-07 | The merge view |
+| **M2 Mail transport & deliverability** | Built, not tried against real providers | Domains and DNS checks, mailbox connect (password and OAuth) and test, DKIM signing, the SMTP send path, IMAP polling and matching, DSN, out-of-office, auto-reply and unsubscribe detection, Sent-folder ingestion and APPEND, the tracking pixel, click and unsubscribe endpoints, the linter, reputation and health scores, the ramp and capacity plan, warm-up, breakers, domain blocklist checks, Postmaster Tools; the Deliverability views and mailbox setup wizard (V13, V14) | IP blocklists for dedicated IPs; any real mail provider (only in-process SMTP and IMAP servers) |
+| **M3 Campaigns** | Built | Campaign CRUD, goals, initial email and variants, follow-up sequences by stage, preflight and launch, enrollment, the scheduler, thread derivation, stats; the Inbox (V3), Thread view (V4), Campaigns list (V5), Campaign detail with the Board (V6) and the builder (V7); E2E-03, -06, -10, -13 and -14 | E2E-04 against a real mail server (§20.1) |
+| **M4 AI agent & escalations** | Built, not calibrated | Jev classification (client, question set, policy, Claude fallback, Classification panel, Hot view), Claude analysis and drafting, AI follow-ups and check-ins, guardrails, the autonomy policy, the knowledge base API, escalations and Needs you (API and view), notifications (email, Slack, web push), external agent mode, the work queue, the AI budget | The eval suite and the Jev calibration report (§19.7: they call billed models); nothing else in the views |
+| **M5 Integrations & polish** | Partly built | Stripe, Cal.com, Calendly and generic events; outbound webhooks; dashboard, funnel and knowledge-gap analytics; MCP tools, and the prompts and resource templates whose tools exist | The agent skill, performance work, docs, the go-live procedure (§19.10) |
+
+M0 exit criteria: `/api/v1/openapi.json` is served (checked on the built server) and the shell renders (checked in a browser). CI has not run.
+
+#### Where each part lives
+
+| Specification | Code | Tests |
+|---|---|---|
+| §5.3–§5.6, §5.8 thread stage, state, next action, open status | `packages/core/src/thread/derive.ts` | `derive.test.ts` |
+| §5.6 evaluation: load, derive, write under the version lock, log | `apps/worker/src/thread/` | `evaluate.test.ts` (database) |
+| §5.10 follow-up sequences: selection, save rules, defaults | `packages/core/src/follow-ups/sequences.ts` | `sequences.test.ts` |
+| §5.10, §8.4 waits, business days, sending windows, time zones | `packages/core/src/time/` | `time.test.ts` |
+| §6 schema, enums, migrations | `packages/db/src/schema/`, `packages/db/migrations/` | `schema.test.ts` (database) |
+| §6.1 ID prefixes and generation | `packages/core/src/ids.ts`, `packages/db/src/ids.ts` | `schema.test.ts` |
+| §7.4 thread matching, subject normalisation | `packages/email/src/matching.ts`, `subject.ts` | `email.test.ts` |
+| §7.5 deterministic inbound checks, delivery-status parsing | `packages/email/src/inbound-classification.ts` | `email.test.ts` |
+| §8.3 ramp plans, ramp movement, capacity plan, overrides | `packages/core/src/capacity/` | `capacity.test.ts` |
+| §8.7 content linter | `packages/email/src/linter.ts` | `linter.test.ts` |
+| §8.9, §8.10 breakers, reputation and health scores, bands | `packages/core/src/reputation/score.ts` | `reputation.test.ts` |
+| §9.1 tracking tokens | `packages/email/src/tracking-token.ts` | `email.test.ts` |
+| §10.4 classification policy, §10.7 autonomy, §11.1 escalation rules | `packages/core/src/policy/` | `policy.test.ts` |
+| §12.2 contact filter, §13.4 contact and tag operations | `apps/web/src/server/contacts/` | `list.test.ts`, `api.test.ts` (database) |
+| §13.1–§13.3 contract, conventions, OpenAPI generation | `packages/contract/src/` | `contract.test.ts` |
+| §13.2–§13.3 authentication, scopes, validation, errors, idempotency, ETags, pagination | `apps/web/src/server/api/` | `api.test.ts` (database), `route-coverage.test.ts` |
+
+The contract declares 10 of the operations in §13.4: `getOpenApiDocument`, `getCurrentPrincipal`, `listContacts`, `createContact`, `getContact`, `updateContact`, `deleteContact`, `listTags`, `createTag`, `deleteTag`.
+
+#### How it was verified
+
+- **Tests:** 278 pass. By package: core 175, email 37, contract 21, db 13, web 28, worker 4. The 39 that need a database (8 in db, 27 in web, 4 in worker) are skipped when `TEST_DATABASE_URL` is not set.
+- **Property tests (§19.3):** properties 1, 4, 5 and 9 for thread derivation, 6 for window fitting, and 8 for the capacity plan, as far as each concerns pure logic. Properties 2, 3 and 7 need the send path and are not covered.
+- **Contract rules (§19.8):** implemented as tests over the registry and the generated document, not as a Spectral ruleset. A test checks that the route files and the registry match exactly.
+- **Integration scenarios (§19.4):** none runs as written, because they need SMTP and IMAP. The decision logic of IT-15, IT-16, IT-21 and IT-24 to IT-34 is covered by unit tests, and one thread is followed through the §22.E timeline against the database.
+- **Running server:** the built Next.js app was started and called over HTTP: health checks, the OpenAPI document, a 401 without a key, creating and filtering contacts, a validation error, and an unknown path.
+- **Limits of the verification:** the database tests ran on PostgreSQL 15.14, not 16. The CI workflow is written but has not run. There are no end-to-end, AI evaluation, deliverability, security or performance tests yet.
+
+#### Differences from the technology stack (§4.2)
+
+| This specification says | What is built | Why |
+|---|---|---|
+| Luxon for time zones | The runtime's `Intl` data behind a `ZoneCalendar` interface | The first code was written before any package was installed. A Luxon-backed calendar can replace it without touching its callers. |
+| Testcontainers for integration tests | Any PostgreSQL server named by `TEST_DATABASE_URL`; each run creates and drops its own database | The development machine has no Docker. |
+| Spectral for the OpenAPI rules | The same rules as tests in `packages/contract` | They run with the unit tests and need no extra tool. |
+| pnpm workspaces and Turborepo | pnpm workspaces only | Not needed yet at this size. |
+| A generated API client in `packages/contract` | Not generated yet | No UI consumes the API yet. |
+| Structured logs (pino) | `console` | Not started. |
+
+#### Decisions made where this specification is silent
+
+Each of these is implemented and tested. They are listed here so they can be confirmed or changed.
+
+- **Thread derivation**
+  - §5.3: an open or click from an unknown source counts as machine evidence: delivery is proven and the thread shows "Opened (auto)". Only the sender's own fetches are ignored.
+  - §5.5: a thread waiting for approval has next action `none`. A reply that is still being drafted is `send_reply` with no time.
+  - §5.8: a human reply or a human click marks the thread opened even when tracking was off.
+  - §5.10: when a person stops follow-ups, the thread waits with no finish rule. After a hold, the next follow-up is due at the later of its normal time and the end of the hold.
+  - §8.4: a sending window that falls entirely inside a daylight-saving jump is skipped for that day.
+- **Capacity and reputation**
+  - §8.3.1: an idle domain drops back 3 steps each time another 14 days pass without a sending day.
+  - §8.3.2: Critical drops the ramp back 2 steps once, on entering the band, and then holds for as long as the band stays Critical.
+  - §8.3.2: in a Paused band, replies are limited by the mailbox's own warm-up cap.
+  - §8.9: the complaint breaker has no minimum send count, as written. The hard-bounce breaker needs 50 sends.
+  - §8.10: the points each input costs are rounded to whole numbers, and the score is 100 minus their sum, so the figures shown on the domain page add up.
+- **Classification policy**
+  - §10.4: a message that needs no reply still goes to Claude when its intent is `not_interested`, `not_now`, `referral` or `wrong_person` at 0.5 or above. Closing a thread needs both models, and check-in dates and referral details come from Claude.
+  - §10.4: when Jev and Claude disagree about a goal, a person is asked. Jev alone achieves a goal only when Claude did not run or agrees.
+  - §11.1: `went_quiet` and `reopened` escalations are due one business day later in the workspace timezone. Hour-based SLAs wait for workspace business hours.
+- **API**
+  - §12.2: "not equal", "not in" and NOT include contacts where the field is empty. Numeric comparisons on a custom field match only values stored as numbers. A filter may nest 6 levels deep and hold 50 conditions.
+  - §12.5: until city and country inference is built, a contact's timezone is its explicit one, then the campaign fallback, then the workspace default.
+  - §13.2: an API key is `ck_live_` followed by 32 random bytes in base64url. The prefix shown afterwards is its first 12 characters.
+  - §13.3: `validation_failed` is HTTP 400. A problem's `type` is `/problems/<code>`.
+  - §13.3: a request that fails leaves no idempotency record, so it can be retried with the same key. A second request while the first is still running gets 409.
+  - §13.3: an ETag is derived from the resource's ID and `updated_at`. A cursor is bound to the sort order it was issued for.
+  - §13.4: `listContacts` sorts by `-created_at` (default), `created_at`, `-updated_at`, `-last_contacted_at`, `-last_replied_at` or `email`, with empty values last.
+  - §13.4: an unknown path under `/api/v1` answers with a 404 problem document.
+
+#### Known gaps in what is built
+
+- The first workspace, its owner and a first key come from the bootstrap CLI. After that, the owner signs up with their invited email and manages keys and people through the API.
+- The lifecycle moves of §5.9 happen where their cause is handled: launch (`prospect`), reply ingestion (`engaged`), goal achievement. Evaluation itself doesn't move them. A thread closed as `not_interested` tags the contact `not-interested`.
+- (Corrected: evaluation runs from the job queue, webhooks and SSE events come from the activity log, and new contacts are verified in the background. Earlier versions of this list said otherwise.)
+
+#### Open issues in this specification
+
+- **IT-22 and the reputation formula disagree.** 2.5% hard bounces scores exactly 80 by §8.10, which is Healthy, but IT-22 expects At risk. The §15.15 wireframe ("At risk (hard bounces 2.3%)") has the same problem. The code follows the formula.
+- **Manual stage floor before the first send.** §5.3 lets an operator move a thread forward without evidence, but the `threads` check constraint requires a mailbox for any stage beyond Queued, and a thread gets its mailbox only at its first send.
+- **Polite close after "not interested".** §10.4 closes the thread and then applies `on_not_interested`, which may send a polite closing reply. The pre-send guard (§7.2) only sends on an active thread or with a person's approval.
+
+#### Changes made to this specification during implementation
+
+- §5.4: the rule for reopening a closed thread, with the new `threads.closed_at`.
+- §5.6 and §6.7: the stored facts evaluation reads, with the new columns `manually_paused`, `stopped_at`, `follow_ups_not_before` and `finish_applied_at` on threads and `needs_reply_p` on messages.
+- §6.1: the ID prefixes `seq`, `int` and `evt`.
+- §8.3.3 and §8.3.4: whole-number rounding, and the reply reserve held for replies only. IT-16 and IT-21 now expect 8 and 15 first touches. Property 8 in §19.3 allows the reply overflow.
+- §19.2: test cases for reopening and for rounding.
+- §22.C: the activity type `contact.deleted`.
+
 ---
 
 ## 21. Open questions & risks
@@ -3019,11 +3617,11 @@ Every E2E page gets an **axe-core** check (0 serious or critical violations) and
 
 ### 22.C Activity types
 
-`contact.created`, `contact.updated`, `contact.merged`, `contact.unsubscribed`, `contact.erased`, `contact.note_added`, `thread.enrolled`, `thread.stage_changed`, `thread.state_changed`, `thread.classified`, `thread.classification_fallback`, `thread.assigned`, `thread.ai_paused`, `thread.ai_resumed`, `message.composed`, `message.pending_approval`, `message.approved`, `message.rejected`, `message.scheduled`, `message.sent`, `message.failed`, `message.bounced`, `message.received`, `message.opened`, `message.clicked`, `goal.achieved`, `goal.revoked`, `escalation.created`, `escalation.resolved`, `escalation.sla_breached`, `knowledge.created_from_escalation`, `campaign.launched`, `campaign.paused`, `campaign.breaker_tripped`, `mailbox.paused`, `mailbox.resumed`, `mailbox.warmup_held`, `domain.reputation_changed`, `domain.ramp_advanced`, `domain.ramp_held`, `domain.ramp_stepped_back`, `domain.ramp_plan_changed`, `domain.cap_overridden`, `campaign.priority_changed`, `follow_up.scheduled`, `follow_up.cancelled` (with the reason: reply, stage change, paused, stopped), `follow_up.skipped`, `follow_up.sequence_switched`, `follow_up.sequence_finished`, `follow_up.stopped`, `follow_up.resumed`.
+`contact.created`, `contact.updated`, `contact.deleted`, `contact.merged`, `contact.unsubscribed`, `contact.erased`, `contact.note_added`, `thread.enrolled`, `thread.stage_changed`, `thread.state_changed`, `thread.classified`, `thread.classification_fallback`, `thread.assigned`, `thread.ai_paused`, `thread.ai_resumed`, `message.composed`, `message.pending_approval`, `message.approved`, `message.rejected`, `message.scheduled`, `message.sent`, `message.failed`, `message.bounced`, `message.received`, `message.opened`, `message.clicked`, `goal.achieved`, `goal.revoked`, `escalation.created`, `escalation.resolved`, `escalation.sla_breached`, `knowledge.created_from_escalation`, `campaign.created`, `campaign.launched`, `campaign.paused`, `campaign.resumed`, `campaign.archived`, `campaign.breaker_tripped`, `mailbox.paused`, `mailbox.resumed`, `mailbox.warmup_held`, `mailbox.connection_tested`, `mailbox.poll_failed`, `message.send_retried`, `message.edited`, `message.cancelled`, `escalation.snoozed`, `escalation.assigned`, `message.attached`, `message.ignored`, `domain.delisted`, `domain.dns_changed`, `webhook.disabled`, `deliverability.junk_reply`, `domain.reputation_changed`, `domain.ramp_advanced`, `domain.ramp_held`, `domain.ramp_resumed`, `domain.ramp_stepped_back`, `domain.ramp_plan_changed`, `domain.cap_overridden`, `campaign.priority_changed`, `follow_up.scheduled`, `follow_up.cancelled` (with the reason: reply, stage change, paused, stopped), `follow_up.skipped`, `follow_up.sequence_switched`, `follow_up.sequence_finished`, `follow_up.stopped`, `follow_up.resumed`, `follow_up.check_in_scheduled`, `follow_up.check_in_cancelled`, `ai.budget_warning`, `ai.budget_exhausted`, `domain.first_touches_resumed`, `domain.postmaster_disconnected`, `thread.paused`, `thread.resumed`, `thread.closed`, `thread.stage_floor_set`, `contact.unsubscribe_undone`, `deliverability.breaker_tripped`, `mailbox.health_changed`, `user.removed`.
 
 ### 22.D Problem `code` values
 
-`validation_failed`, `unauthorized`, `forbidden_scope`, `not_found`, `conflict`, `precondition_failed`, `idempotency_key_reused`, `rate_limited`, `preflight_failed`, `send_blocked` (with `errors[].reason ∈ {suppressed, unsubscribed, bounced, do_not_contact, outside_window, cap_reached, lint_blocker, guardrail_failed, mailbox_paused, campaign_paused, thread_terminal}`), `thread_terminal`, `stage_already_covered`, `poll_in_progress`, `mailbox_auth_failed`, `dns_check_failed`, `ai_unavailable`, `budget_exceeded`, `internal_error`.
+`validation_failed`, `unauthorized`, `forbidden_scope`, `not_found`, `conflict`, `precondition_failed`, `idempotency_key_reused`, `rate_limited`, `preflight_failed`, `send_blocked` (with `errors[].reason ∈ {suppressed, unsubscribed, bounced, do_not_contact, outside_window, cap_reached, lint_blocker, guardrail_failed, mailbox_paused, campaign_paused, thread_terminal}`), `thread_terminal`, `stage_already_covered`, `poll_in_progress`, `mailbox_auth_failed`, `dns_check_failed`, `ai_unavailable`, `budget_exceeded`, `two_factor_required`, `internal_error`.
 
 ### 22.E Example: one thread's life
 

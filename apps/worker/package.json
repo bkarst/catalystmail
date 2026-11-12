@@ -1,0 +1,23 @@
+{
+  "name": "@catalyst/worker",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "The long-running worker (spec D8, §4.4): runs the jobs in the catalog from the pg-boss queue.",
+  "scripts": {
+    "start": "node src/main.ts",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@catalyst/ai": "workspace:*",
+    "@catalyst/core": "workspace:*",
+    "@catalyst/db": "workspace:*",
+    "@catalyst/email": "workspace:*",
+    "@catalyst/jobs": "workspace:*",
+    "@catalyst/server": "workspace:*",
+    "@catalyst/storage": "workspace:*",
+    "drizzle-orm": "^0.45.4",
+    "kysely": "0.29.8"
+  }
+}

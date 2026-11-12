@@ -1,0 +1,19 @@
+{
+  "name": "@catalyst/mcp",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "The MCP bridge (spec \u00a714): tools generated 1:1 from the API contract, filtered by the caller's scopes.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@catalyst/contract": "workspace:*",
+    "@modelcontextprotocol/sdk": "^1.32.2",
+    "zod": "^4.6.7"
+  }
+}

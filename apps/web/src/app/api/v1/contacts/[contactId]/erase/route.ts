@@ -1,0 +1,3 @@
+import { route } from '@catalyst/server';
+
+export const POST = route('eraseContact');
